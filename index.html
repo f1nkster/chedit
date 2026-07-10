@@ -1284,7 +1284,8 @@ function renderMolecule(canvas, mol, style, opts) {
     for (let i = 0; i < n; i++) {
       const a = mol.atoms[i];
       const bondSum = mol.bonds.reduce((s2, b) => s2 + ((b.a === i || b.b === i) ? b.order : 0), 0) + a.h;
-      const lp = Math.floor(((VE[a.el] || 0) - bondSum) / 2);
+      // nichtbindende Elektronen = Valenzelektronen − Formalladung − Bindungen
+      const lp = Math.floor(((VE[a.el] || 0) - (a.charge || 0) - bondSum) / 2);
       if (lp <= 0) continue;
       const taken = [];
       mol.bonds.forEach(b => {
