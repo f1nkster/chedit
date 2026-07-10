@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChEdit – 3D-Modell</title>
+<style>
+  html, body { height: 100%; }
+  body { margin: 0; display: flex; flex-direction: column; font-family: "Segoe UI", Arial, sans-serif; background: #f2f2f2; }
+  header {
+    flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: #04316a; color: #fff; padding: 7px 12px; border-bottom: 4px solid #fdb735;
+  }
+  header strong { font-size: .95rem; }
+  header .note { font-size: .75rem; opacity: .8; flex: 1; min-width: 120px; }
+  header button {
+    font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer;
+    background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.65);
+    padding: 3px 10px;
+  }
+  header button:hover:not(:disabled) { background: #fff; color: #04316a; }
+  header button:disabled { opacity: .4; cursor: not-allowed; }
+  #viewer { flex: 1; position: relative; min-height: 0; }
+  #msg { text-align: center; color: #5e5e5e; padding-top: 15vh; font-size: .95rem; line-height: 1.6; }
+  #optimiere {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: #fff; color: #5e5e5e; font-size: .95rem; z-index: 5;
+  }
+</style>
+</head>
+<body>
+<header>
+  <strong>🧊 ChEdit – 3D-Modell</strong>
+  <span class="note">Kraftfeld-optimierte Geometrie (Näherung) · Drehen: Maus · Zoom: Mausrad</span>
+  <button id="dlPng" type="button" disabled title="Ansicht als PNG-Bild speichern">⬇ PNG</button>
+  <button id="dlSvg" type="button" disabled title="Ansicht als SVG speichern (eingebettetes Pixelbild)">⬇ SVG</button>
+  <button id="dlMol" type="button" disabled title="3D-Koordinaten als MOL-Datei speichern (für Avogadro, Chimera …)">⬇ MOL (3D)</button>
+</header>
+<div id="viewer"><p id="msg">JSmol wird geladen – der erste Aufruf kann einen Moment dauern …</p></div>
+
+<script>
+"use strict";
+const params = new URLSearchParams(location.search);
+const JSMOL_FALLBACK = "https://intern.chemiedidaktik.fau.de/jsmol";
+const msg = document.getElementById("msg");
+let applet = null, modelDone = false;
+
+function fail(text) { msg.innerHTML = text; }
+
+// JSmol-Installation finden: 1. ?jsmol=…  2. lokaler Ordner "jsmol/"  3. Fallback-Server
+async function resolveJsmolBase() {
+  if (params.get("jsmol")) return new URL(params.get("jsmol"), location.href).href;
+  try {
+    const r = await fetch("jsmol/JSmol.min.js", { method: "HEAD" });
+    if (r.ok) return new URL("jsmol", location.href).href;
+  } catch (e) { /* z. B. file:// – dann Fallback */ }
+  return JSMOL_FALLBACK;
+}
+
+/* ---------- Export-Funktionen ---------- */
+function download(name, blob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function getCanvas() { return document.querySelector("#viewer canvas"); }
+
+document.getElementById("dlPng").addEventListener("click", () => {
+  const cv = getCanvas();
+  if (cv) cv.toBlob(b => download("chedit-3d-modell.png", b), "image/png");
+});
+document.getElementById("dlSvg").addEventListener("click", () => {
+  const cv = getCanvas();
+  if (!cv) return;
+  const du = cv.toDataURL("image/png");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${cv.width}" height="${cv.height}" viewBox="0 0 ${cv.width} ${cv.height}"><image width="${cv.width}" height="${cv.height}" xlink:href="${du}"/></svg>`;
+  download("chedit-3d-modell.svg", new Blob([svg], { type: "image/svg+xml" }));
+});
+document.getElementById("dlMol").addEventListener("click", () => {
+  let mol3d = "";
+  try { mol3d = Jmol.evaluate(applet, 'write("mol")'); } catch (e) {}
+  if (typeof mol3d === "string" && mol3d.indexOf("V2000") >= 0) {
+    download("chedit-3d-modell.mol", new Blob([mol3d], { type: "chemical/x-mdl-molfile" }));
+  } else if (molfile) {
+    download("chedit-modell.mol", new Blob([molfile], { type: "chemical/x-mdl-molfile" }));
+  }
+});
+
+/* ---------- Modell erst nach fertiger Optimierung zeigen ---------- */
+function finishModel() {
+  if (modelDone || !applet) return;
+  modelDone = true;
+  Jmol.script(applet, "center; zoom 0;");
+  const ov = document.getElementById("optimiere");
+  if (ov) ov.remove();
+  ["dlPng", "dlSvg", "dlMol"].forEach(id => { document.getElementById(id).disabled = false; });
+}
+// wird von JSmol während der Minimierung aufgerufen (Status u. a. "starting", "calculate", "done")
+window.cheditMinDone = function () {
+  if (/done/i.test(Array.from(arguments).join(" "))) finishModel();
+};
+
+/* ---------- Start ---------- */
+let molfile = "";
+try { molfile = atob(location.hash.slice(1)); } catch (e) {}
+if (location.protocol === "file:") {
+  fail("Direkt aus dem Datei-Explorer (file://) kann JSmol aus Sicherheitsgründen des Browsers nicht laden.<br>" +
+       "Bitte <code>start-lokal.bat</code> im Projektordner doppelklicken – sie startet einen lokalen " +
+       "Mini-Server und öffnet das Tool im Browser. Oder die Version auf dem Webserver verwenden.");
+} else if (!molfile || molfile.indexOf("V2000") < 0) {
+  fail("Kein Molekül übergeben.<br>Diese Seite wird über den Button „🧊 3D-Modell“ im ChEdit-Formeleditor geöffnet.");
+} else {
+  resolveJsmolBase().then(base => {
+    if (new URL(base, location.href).origin !== location.origin) {
+      msg.innerHTML += "<br><small>Hinweis: JSmol liegt auf einem anderen Server – das kann sehr lange dauern oder scheitern. " +
+        "Am besten den Ordner <code>jsmol/</code> neben das Tool legen oder die Version auf dem Server verwenden.</small>";
+    }
+    const s = document.createElement("script");
+    s.src = base + "/JSmol.min.js";
+    s.onerror = () => fail("JSmol konnte nicht geladen werden.<br>Ist <code>" + base + "</code> erreichbar?");
+    s.onload = () => {
+      try {
+        Jmol.setDocument(0);
+        applet = Jmol.getApplet("chedit3d", {
+          use: "HTML5",
+          width: "100%",
+          height: "100%",
+          j2sPath: base + "/j2s",
+          serverURL: base + "/php/jsmol.php",
+          disableInitialConsole: true,
+          minimizationCallback: "cheditMinDone",
+          // Das Overlay verdeckt die Ansicht, bis die Minimierung fertig ist ("Endprodukt" direkt sichtbar).
+          // Achtung: "set minimizationRefresh false" würde die Minimierung in JSmol komplett anhalten!
+          script: 'set antialiasDisplay ON; set frank OFF;' +
+                  ' load DATA "mol"\n' + molfile + 'END "mol";' +
+                  ' minimize steps 500;'
+        });
+        document.getElementById("viewer").innerHTML =
+          Jmol.getAppletHtml(applet) +
+          '<div id="optimiere">Geometrie wird optimiert …</div>';
+        // Sicherheitsnetz: spätestens nach 8 s anzeigen (falls der Callback ausbleibt)
+        setTimeout(finishModel, 8000);
+      } catch (e) {
+        fail("JSmol-Fehler: " + String(e.message || e));
+      }
+    };
+    document.head.appendChild(s);
+  });
+}
+</script>
+</body>
+</html>

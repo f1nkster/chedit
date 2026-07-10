@@ -1,0 +1,8 @@
+# Einheitliche Zeilenenden – verhindert die "LF will be replaced by CRLF"-Warnungen.
+* text=auto eol=lf
+
+# Windows-Batchdatei braucht CRLF, sonst kann sie fehlerhaft ausgeführt werden.
+*.bat text eol=crlf
+
+# Binärdateien nicht anfassen.
+*.woff2 binary

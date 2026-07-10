@@ -1,0 +1,27 @@
+# JSmol (Drittsoftware, LGPL) – nicht mit versionieren.
+# Wird zur Laufzeit vom Server geladen bzw. für lokale Tests separat abgelegt.
+# Siehe NOTICE.md, Abschnitt JSmol.
+jsmol/
+
+# Geschütztes FAU-/Lehrstuhl-Logo: bleibt lokal (für die Live-Version), aber nicht ins
+# öffentliche Repo. index.html blendet das Logo per onerror aus, wenn die Datei fehlt.
+assets/logo-chemiedidaktik.svg
+
+# Bewusst nicht im öffentlichen Repo (bleiben lokal erhalten):
+#   - start-lokal.bat  lokale Test-Hilfsdatei
+#   - oembed.*         server-spezifische Einbettungs-Endpunkte
+start-lokal.bat
+oembed.json
+oembed.php
+
+# Betriebssystem-/Editor-Kram
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*~
+
+# Lokale Test-/Temp-Dateien
+*.log

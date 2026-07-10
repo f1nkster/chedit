@@ -1,0 +1,1883 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chemie-Formeleditor</title>
+<!-- oEmbed-Discovery (https://oembed.com/): nach dem Hochladen die Domain anpassen, siehe README.
+     Statische Variante: href auf oembed.json zeigen lassen. -->
+<link rel="alternate" type="application/json+oembed"
+      href="https://intern.chemiedidaktik.fau.de/reaction/oembed.php?url=https%3A%2F%2Fintern.chemiedidaktik.fau.de%2Freaction%2F&format=json"
+      title="Chemie-Formeleditor">
+<style>
+  /* FAU-Hausschrift, lokal eingebunden (DSGVO: keine externen Anfragen zur Laufzeit) */
+  @font-face {
+    font-family: "Source Sans 3";
+    font-style: normal;
+    font-weight: 200 900;
+    font-display: swap;
+    src: url("assets/source-sans-3.woff2") format("woff2");
+  }
+  /* Farbwelt: FAU-Corporate-Design (FAU-Elemental), Akzent Phil-Fak */
+  :root {
+    --fau-blau: #04316a;
+    --fau-dunkelblau: #041e42;
+    --fau-blau-hell: #d3dcf2;
+    --phil-gelb: #fdb735;
+    --phil-orange: #e87722;
+    --bg: #f2f2f2;
+    --card: #ffffff;
+    --ink: #1a1a1a;
+    --muted: #5e5e5e;
+    --ok: #15803d;
+    --err: #b91c1c;
+    --border: #e0e0e0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Source Sans 3", "Segoe UI", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+  }
+  .app { max-width: 860px; margin: 0 auto; padding: 20px 16px 28px; }
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between;
+    padding-bottom: 10px; border-bottom: 4px solid var(--phil-gelb);
+  }
+  .logo { height: 46px; width: auto; flex: none; }
+  header a { flex: none; line-height: 0; }
+  /* ChEdit-Logo (Variante 1e „Editor-Caret“): tippt sich ins Eingabefeld, Caret blinkt */
+  .logo-chedit {
+    display: inline-flex; align-items: center; flex: none;
+    background: #f4f6fa; border: 1.5px solid #d9e0ea; border-radius: 10px;
+    padding: 7px 13px; line-height: 1;
+    font-family: "Courier New", Courier, monospace; font-size: 25px;
+    color: var(--fau-blau); letter-spacing: 1px;
+  }
+  .logo-chedit .b { font-weight: 700; }
+  .logo-chedit .t { animation: typeIn 0.05s linear both; }
+  .logo-chedit .caret {
+    width: 4px; height: 25px; background: var(--phil-gelb); border-radius: 2px;
+    margin-left: 5px; animation: caretBlink 1.1s step-end infinite;
+  }
+  @keyframes typeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes caretBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .logo-chedit .t, .logo-chedit .caret { animation: none; }
+  }
+  header + .mode-switch { margin-top: 14px; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .mode-switch { display: inline-flex; border: 1px solid var(--fau-blau); overflow: hidden; background: var(--card); }
+  .mode-switch button {
+    border: 0; background: transparent; padding: 8px 16px; cursor: pointer;
+    font: inherit; font-size: .9rem; color: var(--fau-blau); font-weight: 600;
+  }
+  .mode-switch button:hover { background: var(--fau-blau-hell); }
+  .mode-switch button.active { background: var(--fau-blau); color: #fff; }
+  .mode-switch button:disabled { opacity: .4; cursor: not-allowed; }
+  .mode-switch button:disabled:hover { background: transparent; }
+  .mode-switch button.active:disabled { background: var(--muted); }
+  .hint { color: var(--muted); font-size: .88rem; margin: 6px 0 14px; }
+  .input-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  #eq {
+    flex: 1 1 320px; font-size: 1.1rem; padding: 10px 14px;
+    border: 1px solid var(--muted); background: var(--card);
+    font-family: inherit; min-width: 0;
+  }
+  #eq:focus { outline: 2px solid var(--fau-blau); outline-offset: 1px; }
+  #examples {
+    font: inherit; font-size: .9rem; padding: 8px 10px; border: 1px solid var(--muted);
+    background: var(--card); color: var(--ink); cursor: pointer;
+  }
+  #feedback { margin-top: 12px; font-size: .95rem; }
+  #feedback .msg-ok { color: var(--ok); font-weight: 600; }
+  #feedback .msg-err { color: var(--err); }
+  #feedback .msg-muted { color: var(--muted); }
+  #feedback .msg-warn { color: var(--phil-orange); }
+  #feedback table { border-collapse: collapse; margin-top: 8px; background: var(--card); }
+  #feedback th, #feedback td { border: 1px solid var(--border); padding: 5px 12px; text-align: center; font-size: .9rem; }
+  #feedback th { background: var(--fau-blau-hell); color: var(--fau-dunkelblau); font-weight: 600; }
+  .preview-card {
+    margin-top: 14px; background: var(--card); border: 1px solid var(--border);
+    border-top: 3px solid var(--phil-gelb);
+    padding: 18px; overflow-x: auto;
+    min-height: 90px; display: flex; align-items: center;
+  }
+  .preview-card.empty { color: var(--muted); font-size: .9rem; justify-content: center; }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 14px; }
+  .toolbar button {
+    font: inherit; font-size: .92rem; padding: 9px 16px; cursor: pointer; font-weight: 600;
+    border: 1px solid var(--fau-blau); background: var(--card); color: var(--fau-blau);
+  }
+  .toolbar button:hover:not(:disabled) { background: var(--fau-blau); color: #fff; }
+  .toolbar button.primary { background: var(--fau-blau); color: #fff; }
+  .toolbar button.primary:hover:not(:disabled) { background: var(--fau-dunkelblau); }
+  .toolbar button:disabled { opacity: .45; cursor: not-allowed; }
+  .toolbar label { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--muted); }
+  .toolbar select, .toolbar input[type=range] { font: inherit; }
+  .status { margin-top: 10px; font-size: .88rem; min-height: 1.2em; }
+  .status.ok { color: var(--ok); }
+  .status.err { color: var(--err); }
+  .opt-label { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--muted); }
+  #sheetSection {
+    margin-top: 22px; background: var(--card); border: 1px solid var(--border);
+    border-top: 3px solid var(--phil-gelb); padding: 14px 16px 16px;
+  }
+  #sheetSection h2 { font-size: 1rem; margin: 0 0 10px; color: var(--fau-blau); }
+  #sheetTitle {
+    width: 100%; font: inherit; font-size: .95rem; padding: 7px 10px;
+    border: 1px solid var(--muted); background: var(--card); margin-bottom: 8px;
+  }
+  #sheetList { margin: 0 0 10px; padding-left: 1.6em; }
+  #sheetList li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  #sheetList .sheet-item-label {
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: .92rem;
+  }
+  #sheetList .badge {
+    flex: none; font-size: .72rem; color: var(--fau-dunkelblau); background: var(--fau-blau-hell);
+    padding: 1px 7px; font-weight: 600;
+  }
+  #sheetList button {
+    flex: none; font: inherit; font-size: .8rem; padding: 2px 8px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--card); color: var(--ink);
+  }
+  #sheetList button:hover:not(:disabled) { border-color: var(--fau-blau); color: var(--fau-blau); }
+  #sheetList button:disabled { opacity: .35; cursor: not-allowed; }
+  button:focus-visible, select:focus-visible, input:focus-visible {
+    outline: 2px solid var(--phil-orange); outline-offset: 2px;
+  }
+  /* Fallback-Overlay für die 3D-Ansicht (wenn Popups blockiert sind, z. B. eingebettet) */
+  #viewerOverlay {
+    position: fixed; inset: 0; background: rgba(4, 30, 66, 0.55); z-index: 60;
+    display: flex; align-items: center; justify-content: center; padding: 12px;
+  }
+  #viewerOverlay[hidden] { display: none; }
+  .viewer-box {
+    width: min(720px, 96vw); height: min(640px, 94vh); background: var(--card);
+    display: flex; flex-direction: column; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  }
+  .viewer-bar { background: var(--fau-blau); display: flex; justify-content: flex-end; padding: 4px 6px; }
+  .viewer-bar button {
+    font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer;
+    background: transparent; color: #fff; border: 1px solid rgba(255, 255, 255, 0.65); padding: 2px 10px;
+  }
+  .viewer-bar button:hover { background: #fff; color: var(--fau-blau); }
+  .viewer-box iframe { flex: 1; border: 0; width: 100%; }
+  footer { margin-top: 20px; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+  .made { margin: 14px 0 0; text-align: center; color: var(--muted); font-size: .82rem; }
+  .made .heart { color: #c4122f; }
+  .made a { color: var(--muted); text-decoration: underline; }
+  .made a:hover { color: var(--fau-blau); }
+  code { background: #e0e0e0; padding: 1px 5px; font-size: .95em; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo-chedit" role="img" aria-label="ChEdit – Chemie-Formeleditor">
+      <span class="t b" style="animation-delay:.3s">C</span><span class="t b" style="animation-delay:.5s">h</span><span class="t" style="animation-delay:.7s">E</span><span class="t" style="animation-delay:.9s">d</span><span class="t" style="animation-delay:1.1s">i</span><span class="t" style="animation-delay:1.3s">t</span>
+      <span class="caret" aria-hidden="true"></span>
+    </div>
+    <h1 class="sr-only">ChEdit – Chemie-Formeleditor</h1>
+    <a href="https://www.chemiedidaktik.phil.fau.de/" target="_blank" rel="noopener"
+       title="Zur Website des Lehrstuhls für Didaktik der Chemie">
+      <!-- FAU-/Lehrstuhl-Logo (geschützt, nicht im öffentlichen Repo). Fehlt die Datei,
+           blendet onerror den Link aus, damit kein kaputtes Bild-Symbol erscheint. -->
+      <img src="assets/logo-chemiedidaktik.svg" alt="Lehrstuhl für Didaktik der Chemie – FAU Erlangen-Nürnberg" class="logo" onerror="this.parentElement.style.display='none'">
+    </a>
+  </header>
+  <div class="mode-switch" role="group" aria-label="Modus wählen">
+    <button id="modeAuto" class="active" type="button">Automatisch ausgleichen</button>
+    <button id="modeCheck" type="button">Selbst ausgleichen &amp; prüfen</button>
+    <button id="modeStruct" type="button">Strukturformeln (OC)</button>
+  </div>
+  <p class="hint" id="modeHint"></p>
+
+  <div class="input-row">
+    <input id="eq" placeholder="z. B. CH4 + O2 -> CO2 + H2O" spellcheck="false" autocomplete="off" autocapitalize="off">
+    <select id="examples">
+      <option value="">Beispiele …</option>
+      <option>CH4 + O2 -> CO2 + H2O</option>
+      <option>Fe + O2 -> Fe2O3</option>
+      <option>Al + HCl -> AlCl3 + H2</option>
+      <option>N2 + H2 &lt;-&gt; NH3</option>
+      <option>C6H12O6 + O2 -> CO2 + H2O</option>
+      <option>Ca(OH)2 + HCl -> CaCl2 + H2O</option>
+      <option>CuSO4*5H2O -> CuSO4 + H2O</option>
+      <option>Na (s) + H2O (l) -> NaOH (aq) + H2 (g)</option>
+      <option>Al + Ag+ -> Al^3+ + Ag</option>
+      <option>MnO4^- + Fe^2+ + H+ -> Mn^2+ + Fe^3+ + H2O</option>
+      <option>Cu^2+ + e- -> Cu</option>
+      <option>Cr2O7^2- + H+ + e- -> Cr^3+ + H2O</option>
+    </select>
+  </div>
+
+  <div class="input-row" id="structOptions" hidden>
+    <div class="mode-switch">
+      <button id="styleSkeleton" class="active" type="button">Skelettformel</button>
+      <button id="styleFull" type="button">C &amp; H ausgeschrieben</button>
+    </div>
+    <div class="mode-switch">
+      <button id="geoZigzag" class="active" type="button" disabled title="Nur bei „C &amp; H ausgeschrieben“ wählbar">Gewinkelt (120°)</button>
+      <button id="geoLinear" type="button" disabled title="Nur bei „C &amp; H ausgeschrieben“ wählbar">Linear (90°)</button>
+    </div>
+    <label class="opt-label" title="Nur bei „C &amp; H ausgeschrieben“ wählbar">
+      <input type="checkbox" id="epPairs" disabled> freie Elektronenpaare
+    </label>
+  </div>
+
+  <div id="feedback" aria-live="polite"></div>
+
+  <div class="preview-card empty" id="previewCard">
+    <span id="previewPlaceholder">Gib oben eine Reaktionsgleichung ein – die Vorschau erscheint hier.</span>
+    <canvas id="preview" hidden></canvas>
+  </div>
+
+  <div class="toolbar">
+    <button id="copyPng" class="primary" type="button" disabled aria-label="Als PNG-Bild in die Zwischenablage kopieren">📋 Als PNG kopieren</button>
+    <button id="dlPng" type="button" disabled aria-label="Als PNG-Bild herunterladen">⬇️ PNG herunterladen</button>
+    <button id="dlSvg" type="button" disabled aria-label="Als SVG-Vektorgrafik herunterladen">⬇️ SVG</button>
+    <button id="copyLink" type="button" disabled aria-label="Link zu dieser Eingabe kopieren">🔗 Link kopieren</button>
+    <button id="addToSheet" type="button" disabled aria-label="Zur Arbeitsblatt-Liste hinzufügen">➕ Zur Liste</button>
+    <button id="view3d" type="button" disabled hidden aria-label="3D-Modell in JSmol anzeigen">🧊 3D-Modell</button>
+    <label>Schrift
+      <select id="font">
+        <option value="Arial">Arial</option>
+        <option value="'Times New Roman', serif">Times New Roman</option>
+        <option value="Georgia, serif">Georgia</option>
+      </select>
+    </label>
+    <label>Größe
+      <input type="range" id="size" min="20" max="64" step="2" value="32">
+      <span id="sizeVal">32</span>
+    </label>
+    <label><input type="checkbox" id="transparent"> transparenter Hintergrund</label>
+  </div>
+  <div class="status" id="status" aria-live="polite"></div>
+
+  <section id="sheetSection" hidden aria-label="Arbeitsblatt-Liste">
+    <h2>📄 Arbeitsblatt (<span id="sheetCount">0</span>)</h2>
+    <input id="sheetTitle" placeholder="Titel des Arbeitsblatts (optional)" aria-label="Titel des Arbeitsblatts">
+    <ol id="sheetList"></ol>
+    <div class="toolbar">
+      <label><input type="checkbox" id="gapCoefs"> Lücken: Koeffizienten freilassen</label>
+      <label><input type="checkbox" id="withSolution" checked disabled> Lösungsblatt anhängen</label>
+      <button id="printSheet" class="primary" type="button">🖨 Drucken / PDF</button>
+      <button id="clearSheet" type="button">Liste leeren</button>
+    </div>
+  </section>
+
+  <footer>
+    <strong>Eingabe-Tipps:</strong> Reaktionspfeil mit <code>-&gt;</code> oder <code>=</code>, Gleichgewicht mit
+    <code>&lt;-&gt;</code> · Formeln wie gewohnt tippen (<code>H2O</code>, <code>Ca(OH)2</code>) ·
+    Zustände optional als <code>(s)</code>, <code>(l)</code>, <code>(g)</code>, <code>(aq)</code> ·
+    Hydrate mit <code>*</code>, z. B. <code>CuSO4*5H2O</code> ·
+    Ionen: einfache Ladung direkt anhängen (<code>H+</code>, <code>NO3-</code>), mehrfache Ladung mit <code>^</code>
+    (<code>Fe^3+</code>, <code>SO4^2-</code>) · Elektronen für Teilgleichungen als <code>e-</code>.
+    <br><strong>Strukturformeln:</strong> Halbstrukturformel (<code>CH3-CH(CH3)-OH</code>), SMILES
+    (<code>CCO</code>) oder Name (<code>Ethanol</code>, <code>2-Methylbutan</code>, <code>But-2-en</code>,
+    <code>Essigsäure</code>) · Zweige in Klammern, ggf. mit Anzahl: <code>C(CH3)4</code> ·
+    Mehrfachbindungen mit <code>=</code> und <code>#</code> · Ringe mit Ziffern (<code>C1CCCCC1</code>),
+    Benzol als <code>c1ccccc1</code>.
+    <p class="made">Made with <span class="heart">❤</span> ·
+      <a href="https://www.chemiedidaktik.phil.fau.de/impressum" target="_blank" rel="noopener">Impressum</a></p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- Elemente ---------- */
+const ELEMENTS = new Set(("H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr " +
+  "Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir " +
+  "Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og").split(" "));
+
+/* ---------- Formel-Parser ---------- */
+function parseSimpleFormula(str) {
+  let i = 0;
+  function readInt() {
+    let s = "";
+    while (i < str.length && /\d/.test(str[i])) { s += str[i]; i++; }
+    return s ? parseInt(s, 10) : 0;
+  }
+  function merge(target, src, factor) {
+    for (const k in src) target[k] = (target[k] || 0) + src[k] * factor;
+  }
+  function group(end) {
+    const counts = {};
+    while (i < str.length) {
+      const ch = str[i];
+      if (ch === end) { i++; return counts; }
+      if (ch === "(" || ch === "[") {
+        i++;
+        const inner = group(ch === "(" ? ")" : "]");
+        merge(counts, inner, readInt() || 1);
+      } else if (/[A-Z]/.test(ch)) {
+        let sym = ch; i++;
+        while (i < str.length && /[a-z]/.test(str[i])) { sym += str[i]; i++; }
+        if (!ELEMENTS.has(sym)) throw new Error(`Unbekanntes Element „${sym}“`);
+        counts[sym] = (counts[sym] || 0) + (readInt() || 1);
+      } else if (ch === " ") {
+        i++;
+      } else {
+        throw new Error(`Unerwartetes Zeichen „${ch}“`);
+      }
+    }
+    if (end) throw new Error("Klammer nicht geschlossen");
+    return counts;
+  }
+  const c = group(null);
+  if (Object.keys(c).length === 0) throw new Error("Leere Formel");
+  return c;
+}
+
+function parseFormulaCounts(formula) {
+  // Hydrate: CuSO4*5H2O oder CuSO4·5H2O
+  const parts = formula.split(/[·*]/);
+  const total = {};
+  parts.forEach((part, idx) => {
+    part = part.trim();
+    if (!part) throw new Error("Leerer Formelteil nach „·“");
+    let factor = 1;
+    if (idx > 0) {
+      const m = part.match(/^(\d+)\s*(.*)$/);
+      if (m && m[2]) { factor = parseInt(m[1], 10); part = m[2]; }
+    }
+    const c = parseSimpleFormula(part);
+    for (const k in c) total[k] = (total[k] || 0) + c[k] * factor;
+  });
+  return total;
+}
+
+/* ---------- Gleichungs-Parser ---------- */
+function parseEquation(input) {
+  let s = input.trim();
+  if (!s) throw new Error("");
+  const reversible = /<->|<=>|⇌|↔/.test(s);
+  s = s.replace(/<->|<=>|⇌|↔/g, "⇌");
+  if (!reversible) s = s.replace(/->|→|=/g, "→");
+  const arrowChar = reversible ? "⇌" : "→";
+  const parts = s.split(arrowChar);
+  if (parts.length < 2) throw new Error("Bitte einen Reaktionspfeil eingeben, z. B. „->“");
+  if (parts.length > 2) throw new Error("Es darf nur einen Reaktionspfeil geben");
+
+  // Stoffe an "+" trennen – aber ein direkt angehängtes "+" am Wortende ist eine Ladung (H+, Fe^3+)
+  function splitSpecies(side) {
+    const terms = [];
+    let cur = "";
+    for (let i = 0; i < side.length; i++) {
+      const ch = side[i];
+      if (ch === "+") {
+        const prev = cur.slice(-1);
+        const next = side[i + 1] || "";
+        const attached = prev !== "" && !/\s/.test(prev);
+        if (attached && (next === "" || /[\s+]/.test(next))) { cur += ch; continue; }
+        terms.push(cur); cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    terms.push(cur);
+    return terms.map(t => t.trim()).filter(Boolean);
+  }
+
+  function parseSide(side) {
+    const terms = splitSpecies(side);
+    if (terms.length === 0) throw new Error("Auf einer Seite des Pfeils fehlen die Stoffe");
+    return terms.map(term => {
+      let coef = null, rest = term;
+      const m = term.match(/^(\d+)\s*(.+)$/);
+      if (m) { coef = parseInt(m[1], 10); rest = m[2].trim(); }
+      let state = null;
+      const sm = rest.match(/\(\s*(s|l|g|aq)\s*\)\s*$/i);
+      if (sm) { state = sm[1].toLowerCase(); rest = rest.slice(0, sm.index).trim(); }
+      // Ladung: ^2-, ^-, ^+3 … oder einfache angehängte Ladung (H+, NO3-, e-)
+      let charge = 0, bare = false;
+      let cm = rest.match(/\^\s*(\d*)\s*([+\-−])\s*$/);
+      if (!cm) {
+        const cm2 = rest.match(/\^\s*([+\-−])\s*(\d*)\s*$/);
+        if (cm2) cm = [cm2[0], cm2[2], cm2[1]];
+      }
+      if (cm) {
+        const mag = cm[1] ? parseInt(cm[1], 10) : 1;
+        charge = cm[2] === "+" ? mag : -mag;
+        rest = rest.slice(0, rest.length - cm[0].length).trim();
+      } else {
+        const bm = rest.match(/([+\-−])$/);
+        if (bm) {
+          charge = bm[1] === "+" ? 1 : -1;
+          bare = true;
+          rest = rest.slice(0, -1).trim();
+        }
+      }
+      if (!rest) throw new Error("Formel fehlt (nur eine Zahl eingegeben?)");
+      if (rest === "e") {
+        if (charge >= 0) throw new Error("Elektronen als „e-“ eingeben");
+        return { coef, formula: "e", state, charge: -1, electron: true, bare, counts: {} };
+      }
+      const counts = parseFormulaCounts(rest);
+      return { coef, formula: rest.replace(/\s+/g, ""), state, charge, electron: false, bare, counts };
+    });
+  }
+
+  return { left: parseSide(parts[0]), right: parseSide(parts[1]), reversible };
+}
+
+/* ---------- Ausgleichen (exakte Bruchrechnung mit BigInt) ---------- */
+const bgcd = (a, b) => { a = a < 0n ? -a : a; b = b < 0n ? -b : b; while (b) { [a, b] = [b, a % b]; } return a; };
+function frac(n, d = 1n) {
+  if (d === 0n) throw new Error("Division durch Null");
+  if (d < 0n) { n = -n; d = -d; }
+  const g = bgcd(n, d) || 1n;
+  return [n / g, d / g];
+}
+const fAdd = (x, y) => frac(x[0] * y[1] + y[0] * x[1], x[1] * y[1]);
+const fSub = (x, y) => frac(x[0] * y[1] - y[0] * x[1], x[1] * y[1]);
+const fMul = (x, y) => frac(x[0] * y[0], x[1] * y[1]);
+const fDiv = (x, y) => frac(x[0] * y[1], x[1] * y[0]);
+const fZero = x => x[0] === 0n;
+
+function balance(species, nLeft) {
+  const elements = [...new Set(species.flatMap(sp => Object.keys(sp.counts)))];
+  const n = species.length;
+  // Matrix: Zeilen = Elemente, Spalten = Stoffe (Edukte +, Produkte −)
+  const M = elements.map(el =>
+    species.map((sp, j) => frac(BigInt((sp.counts[el] || 0) * (j < nLeft ? 1 : -1))))
+  );
+  // Ladungsbilanz als zusätzliche Zeile
+  if (species.some(sp => sp.charge !== 0)) {
+    M.push(species.map((sp, j) => frac(BigInt(sp.charge * (j < nLeft ? 1 : -1)))));
+  }
+  // Gauß-Jordan → reduzierte Stufenform
+  const pivotCols = [];
+  let r = 0;
+  for (let c = 0; c < n && r < M.length; c++) {
+    let pr = -1;
+    for (let i = r; i < M.length; i++) if (!fZero(M[i][c])) { pr = i; break; }
+    if (pr < 0) continue;
+    [M[r], M[pr]] = [M[pr], M[r]];
+    const pv = M[r][c];
+    for (let j = c; j < n; j++) M[r][j] = fDiv(M[r][j], pv);
+    for (let i = 0; i < M.length; i++) {
+      if (i !== r && !fZero(M[i][c])) {
+        const f = M[i][c];
+        for (let j = c; j < n; j++) M[i][j] = fSub(M[i][j], fMul(f, M[r][j]));
+      }
+    }
+    pivotCols.push(c); r++;
+  }
+  const free = [];
+  for (let c = 0; c < n; c++) if (!pivotCols.includes(c)) free.push(c);
+  if (free.length === 0)
+    throw new Error("Die Gleichung lässt sich so nicht ausgleichen – prüfe die Formeln und Seiten.");
+  if (free.length > 1)
+    throw new Error("Die Gleichung ist mehrdeutig (mehrere Reaktionen überlagert). Bitte in einzelne Reaktionen aufteilen.");
+
+  const fc = free[0];
+  const sol = new Array(n).fill(null);
+  sol[fc] = frac(1n);
+  pivotCols.forEach((pc, ri) => { sol[pc] = fMul(frac(-1n), M[ri][fc]); });
+
+  // gemeinsamer Nenner → kleinste ganze Zahlen
+  let L = 1n;
+  for (const f of sol) L = (L / bgcd(L, f[1])) * f[1];
+  let ints = sol.map(f => f[0] * (L / f[1]));
+  let g = 0n;
+  for (const v of ints) g = bgcd(g, v);
+  if (g > 1n) ints = ints.map(v => v / g);
+  if (ints[0] < 0n) ints = ints.map(v => -v);
+  if (ints.some(v => v <= 0n))
+    throw new Error("Die Gleichung lässt sich so nicht ausgleichen – steht ein Stoff auf der falschen Seite?");
+  return ints.map(v => Number(v));
+}
+
+/* ---------- Prüfen (manueller Modus) ---------- */
+function checkBalance(eq) {
+  const totals = side => {
+    const t = {};
+    for (const sp of side) {
+      const c = sp.coef || 1;
+      for (const el in sp.counts) t[el] = (t[el] || 0) + c * sp.counts[el];
+    }
+    return t;
+  };
+  const l = totals(eq.left), r = totals(eq.right);
+  const elements = [...new Set([...Object.keys(l), ...Object.keys(r)])];
+  const rows = elements.map(el => ({ el, left: l[el] || 0, right: r[el] || 0, ok: (l[el] || 0) === (r[el] || 0) }));
+  const all = [...eq.left, ...eq.right];
+  if (all.some(sp => sp.charge !== 0)) {
+    const chargeOf = side => side.reduce((q, sp) => q + (sp.coef || 1) * sp.charge, 0);
+    const fmt = q => q > 0 ? "+" + q : q < 0 ? "−" + (-q) : "0";
+    const ql = chargeOf(eq.left), qr = chargeOf(eq.right);
+    rows.push({ el: "Ladung", left: fmt(ql), right: fmt(qr), ok: ql === qr });
+  }
+  return { rows, balanced: rows.every(row => row.ok) };
+}
+
+/* ---------- Rendering (Canvas, für Vorschau & PNG) ---------- */
+function buildSegments(eq, coefs, gap) {
+  // coefs: Array (auto) oder null (Koeffizienten aus der Eingabe verwenden)
+  // gap: true = Koeffizienten als Lücken ("____") ausgeben, z. B. für Arbeitsblätter
+  const segs = [];
+  const species = [...eq.left, ...eq.right];
+  const nLeft = eq.left.length;
+  species.forEach((sp, idx) => {
+    if (idx === nLeft) segs.push({ s: eq.reversible ? "  ⇌  " : "  ⟶  ", m: "n" });
+    else if (idx > 0) segs.push({ s: " + ", m: "n" });
+    const coef = coefs ? coefs[idx] : (sp.coef || 1);
+    if (gap) {
+      segs.push({ s: "____ ", m: "n" });
+    } else if (coef !== 1) {
+      segs.push({ s: String(coef), m: "n" });
+      segs.push({ s: " ", m: "n" }); // schmales Leerzeichen
+    }
+    let afterDot = false;
+    for (const ch of sp.formula) {
+      if (/\d/.test(ch)) {
+        segs.push({ s: ch, m: afterDot ? "n" : "sub" });
+      } else if (ch === "·" || ch === "*") {
+        segs.push({ s: " · ", m: "n" });
+        afterDot = true;
+      } else {
+        segs.push({ s: ch, m: "n" });
+        afterDot = false;
+      }
+    }
+    if (sp.charge !== 0) {
+      const mag = Math.abs(sp.charge);
+      segs.push({ s: (mag > 1 ? mag : "") + (sp.charge > 0 ? "+" : "−"), m: "sup" });
+    }
+    if (sp.state) segs.push({ s: ` (${sp.state})`, m: "n" });
+  });
+  return segs;
+}
+
+function renderSegments(canvas, segs, opts) {
+  // opts: { fontSize, fontFamily, scale, background: null | "#fff" }
+  const fs = opts.fontSize;
+  const subFs = Math.round(fs * 0.68);
+  const subOffset = fs * 0.22;
+  const supOffset = fs * 0.42;
+  const ctx = canvas.getContext("2d");
+  const fontN = `${fs}px ${opts.fontFamily}`;
+  const fontS = `${subFs}px ${opts.fontFamily}`;
+
+  ctx.font = fontN;
+  let textW = 0;
+  for (const g of segs) {
+    ctx.font = g.m === "n" ? fontN : fontS;
+    textW += ctx.measureText(g.s).width;
+  }
+  const padX = fs * 0.55, padY = fs * 0.45;
+  const w = Math.ceil(textW + 2 * padX);
+  const h = Math.ceil(fs * 1.25 + subOffset + 2 * padY);
+
+  canvas.width = Math.max(1, Math.round(w * opts.scale));
+  canvas.height = Math.max(1, Math.round(h * opts.scale));
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
+
+  ctx.setTransform(opts.scale, 0, 0, opts.scale, 0, 0);
+  if (opts.background) {
+    ctx.fillStyle = opts.background;
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    ctx.clearRect(0, 0, w, h);
+  }
+  ctx.fillStyle = "#111111";
+  ctx.textBaseline = "alphabetic";
+  const baseline = padY + fs * 1.0;
+  let x = padX;
+  for (const g of segs) {
+    ctx.font = g.m === "n" ? fontN : fontS;
+    const y = g.m === "sub" ? baseline + subOffset : g.m === "sup" ? baseline - supOffset : baseline;
+    ctx.fillText(g.s, x, y);
+    x += ctx.measureText(g.s).width;
+  }
+  return { w, h };
+}
+
+/* ================== Strukturformeln (OC) ================== */
+const VALENCE = { C: 4, N: 3, O: 2, S: 2, P: 3, F: 1, Cl: 1, Br: 1, I: 1 };
+
+// Gruppen-Tokens für Halbstrukturformeln (Reihenfolge = Priorität, längste zuerst).
+// attach = Index des Atoms, an dem die Kette weiterläuft. dH = geschriebene H-Anzahl.
+const GROUP_TOKENS = [
+  { k: "COOH", atoms: [{ el: "C", dH: 0 }, { el: "O", dH: 0 }, { el: "O", dH: 1 }], bonds: [[0, 1, 2], [0, 2, 1]], attach: 0 },
+  { k: "HOOC", atoms: [{ el: "C", dH: 0 }, { el: "O", dH: 0 }, { el: "O", dH: 1 }], bonds: [[0, 1, 2], [0, 2, 1]], attach: 0 },
+  { k: "CHO", atoms: [{ el: "C", dH: 1 }, { el: "O", dH: 0 }], bonds: [[0, 1, 2]], attach: 0 },
+  { k: "OHC", atoms: [{ el: "C", dH: 1 }, { el: "O", dH: 0 }], bonds: [[0, 1, 2]], attach: 0 },
+  { k: "CO2", atoms: [{ el: "C", dH: 0 }, { el: "O", dH: 0 }, { el: "O", dH: 0 }], bonds: [[0, 1, 2], [0, 2, 2]], attach: 0 },
+  { k: "NH2", atoms: [{ el: "N", dH: 2 }], bonds: [], attach: 0 },
+  { k: "H2N", atoms: [{ el: "N", dH: 2 }], bonds: [], attach: 0 },
+  { k: "NH3", atoms: [{ el: "N", dH: 3 }], bonds: [], attach: 0 },
+  { k: "CH4", atoms: [{ el: "C", dH: 4 }], bonds: [], attach: 0 },
+  { k: "CH3", atoms: [{ el: "C", dH: 3 }], bonds: [], attach: 0 },
+  { k: "H3C", atoms: [{ el: "C", dH: 3 }], bonds: [], attach: 0 },
+  { k: "CH2", atoms: [{ el: "C", dH: 2 }], bonds: [], attach: 0 },
+  { k: "H2C", atoms: [{ el: "C", dH: 2 }], bonds: [], attach: 0 },
+  { k: "H2O", atoms: [{ el: "O", dH: 2 }], bonds: [], attach: 0 },
+  { k: "OH", atoms: [{ el: "O", dH: 1 }], bonds: [], attach: 0 },
+  { k: "HO", atoms: [{ el: "O", dH: 1 }], bonds: [], attach: 0 },
+  { k: "SH", atoms: [{ el: "S", dH: 1 }], bonds: [], attach: 0 },
+  { k: "HS", atoms: [{ el: "S", dH: 1 }], bonds: [], attach: 0 },
+  { k: "NH", atoms: [{ el: "N", dH: 1 }], bonds: [], attach: 0 },
+  { k: "HN", atoms: [{ el: "N", dH: 1 }], bonds: [], attach: 0 },
+  { k: "CO", atoms: [{ el: "C", dH: 0 }, { el: "O", dH: 0 }], bonds: [[0, 1, 2]], attach: 0 },
+  { k: "CN", atoms: [{ el: "C", dH: 0 }, { el: "N", dH: 0 }], bonds: [[0, 1, 3]], attach: 0 },
+  { k: "CH", atoms: [{ el: "C", dH: 1 }], bonds: [], attach: 0 },
+  { k: "HC", atoms: [{ el: "C", dH: 1 }], bonds: [], attach: 0 },
+  { k: "Cl", atoms: [{ el: "Cl" }], bonds: [], attach: 0 },
+  { k: "Br", atoms: [{ el: "Br" }], bonds: [], attach: 0 },
+  { k: "C", atoms: [{ el: "C" }], bonds: [], attach: 0 },
+  { k: "N", atoms: [{ el: "N" }], bonds: [], attach: 0 },
+  { k: "O", atoms: [{ el: "O" }], bonds: [], attach: 0 },
+  { k: "S", atoms: [{ el: "S" }], bonds: [], attach: 0 },
+  { k: "P", atoms: [{ el: "P" }], bonds: [], attach: 0 },
+  { k: "F", atoms: [{ el: "F" }], bonds: [], attach: 0 },
+  { k: "I", atoms: [{ el: "I" }], bonds: [], attach: 0 },
+  // aromatische SMILES-Atome (Kekulé-Struktur wird nachträglich gesetzt)
+  { k: "c", atoms: [{ el: "C" }], bonds: [], attach: 0, arom: true },
+  { k: "n", atoms: [{ el: "N" }], bonds: [], attach: 0, arom: true },
+  { k: "o", atoms: [{ el: "O" }], bonds: [], attach: 0, arom: true },
+  { k: "s", atoms: [{ el: "S" }], bonds: [], attach: 0, arom: true }
+];
+
+function newMol() { return { atoms: [], bonds: [], aromaticFlags: [] }; }
+function addMolAtom(mol, el) { mol.atoms.push({ el, declaredH: undefined }); return mol.atoms.length - 1; }
+function addMolBond(mol, a, b, order) {
+  if (a === b) throw new Error("Ein Atom kann nicht an sich selbst gebunden sein");
+  mol.bonds.push({ a, b, order });
+}
+
+// Ein Parser für beide Schreibweisen: Halbstrukturformel und SMILES-Teilmenge
+function parseStructure(input) {
+  const s = input.replace(/\s+/g, "");
+  if (!s) throw new Error("Leere Eingabe");
+  const mol = newMol();
+  const ringOpen = {};
+  const BOND = { "-": 1, "=": 2, "#": 3, "≡": 3 };
+  // Ohne geschriebene H ist die Eingabe SMILES-artig: dann sind "CO"/"CN"
+  // Atomfolgen (C-O, C-N) und keine Carbonyl-/Nitrilgruppen.
+  const hasH = /H/.test(s);
+
+  function matchParen(str, start) {
+    let d = 0;
+    for (let j = start; j < str.length; j++) {
+      if (str[j] === "(") d++;
+      else if (str[j] === ")") { d--; if (d === 0) return j; }
+    }
+    throw new Error("Klammer nicht geschlossen");
+  }
+
+  function parseChain(str) {
+    let i = 0, first = null, last = null, pending = 1;
+    while (i < str.length) {
+      const ch = str[i];
+      if (BOND[ch] !== undefined) { pending = BOND[ch]; i++; continue; }
+      if (ch === ")") throw new Error("Klammer „)“ ohne passendes „(“");
+      if (ch === "(") {
+        const close = matchParen(str, i);
+        let inner = str.slice(i + 1, close);
+        i = close + 1;
+        let rep = 1;
+        if (i < str.length && /\d/.test(str[i])) { rep = parseInt(str[i], 10); i++; }
+        if (last === null) throw new Error("Zweig „(…)“ ohne vorheriges Atom");
+        // Bindungssymbol am Zweiganfang, z. B. (=O) in SMILES
+        let branchOrder = 1;
+        if (inner && BOND[inner[0]] !== undefined) { branchOrder = BOND[inner[0]]; inner = inner.slice(1); }
+        for (let r = 0; r < rep; r++) {
+          const sub = parseChain(inner);
+          if (sub.first !== null) addMolBond(mol, last, sub.first, branchOrder);
+        }
+        continue;
+      }
+      if (/\d/.test(ch)) { // Ringschluss (SMILES-Ziffer direkt nach einem Atom)
+        if (last === null) throw new Error("Ringziffer ohne Atom davor");
+        if (ringOpen[ch] !== undefined) { addMolBond(mol, ringOpen[ch], last, pending); delete ringOpen[ch]; }
+        else ringOpen[ch] = last;
+        pending = 1;
+        i++; continue;
+      }
+      let tok = null;
+      for (const t of GROUP_TOKENS) {
+        if ((t.k === "CO" || t.k === "CN") && !hasH) continue;
+        if (str.startsWith(t.k, i)) { tok = t; break; }
+      }
+      if (!tok) throw new Error(`„${str.slice(i, i + 4)}“ nicht erkannt – Tipps unten beachten`);
+      i += tok.k.length;
+      const map = tok.atoms.map(a => {
+        const idx = addMolAtom(mol, a.el);
+        mol.atoms[idx].declaredH = a.dH;
+        mol.aromaticFlags[idx] = !!tok.arom;
+        return idx;
+      });
+      tok.bonds.forEach(([x, y, o]) => addMolBond(mol, map[x], map[y], o));
+      const at = map[tok.attach];
+      if (last !== null) addMolBond(mol, last, at, pending);
+      else first = at;
+      last = at;
+      pending = 1;
+    }
+    return { first, last };
+  }
+
+  parseChain(s);
+  if (Object.keys(ringOpen).length) throw new Error("Ring nicht geschlossen (zweite Ringziffer fehlt)");
+  if (!mol.atoms.length) throw new Error("Kein Atom gefunden");
+  kekulize(mol);
+  return mol;
+}
+
+// Aromatische 6-Ringe (c1ccccc1) in alternierende Doppelbindungen umwandeln
+function kekulize(mol) {
+  const arom = mol.aromaticFlags.map((f, i) => f ? i : -1).filter(i => i >= 0);
+  if (!arom.length) return;
+  if (arom.length !== 6) throw new Error("Aromaten: nur einzelne Sechsringe (z. B. c1ccccc1) werden unterstützt");
+  const aset = new Set(arom);
+  const nbr = {};
+  let count = 0;
+  mol.bonds.forEach(b => {
+    if (aset.has(b.a) && aset.has(b.b)) {
+      (nbr[b.a] = nbr[b.a] || []).push(b);
+      (nbr[b.b] = nbr[b.b] || []).push(b);
+      count++;
+    }
+  });
+  if (count !== 6 || arom.some(a => (nbr[a] || []).length !== 2))
+    throw new Error("Aromatischer Ring unvollständig – Ringziffern prüfen (c1ccccc1)");
+  let cur = arom[0], prevB = null;
+  for (let k = 0; k < 6; k++) {
+    const b = nbr[cur].find(x => x !== prevB);
+    b.order = (k % 2 === 0) ? 2 : 1;
+    cur = (b.a === cur) ? b.b : b.a;
+    prevB = b;
+  }
+}
+
+// Valenzen prüfen, implizite H-Zahlen bestimmen, geschriebene H-Zahlen vergleichen
+function finalizeMol(mol) {
+  const warnings = [];
+  mol.atoms.forEach((a, idx) => {
+    const order = mol.bonds.reduce((s2, b) => s2 + ((b.a === idx || b.b === idx) ? b.order : 0), 0);
+    const val = VALENCE[a.el];
+    if (order > val) throw new Error(`${a.el} hätte hier ${order} Bindungen – möglich sind höchstens ${val}`);
+    a.h = val - order;
+    if (a.declaredH !== undefined && a.declaredH !== a.h) {
+      const written = a.el + (a.declaredH ? "H" + (a.declaredH > 1 ? a.declaredH : "") : "");
+      warnings.push(`„${written}“ passt nicht – an dieser Stelle trägt ${a.el} ${a.h} H`);
+    }
+  });
+  mol.warnings = [...new Set(warnings)];
+}
+
+// Summenformel als HTML (C zuerst, dann H, Rest alphabetisch)
+function molFormula(mol) {
+  const counts = {};
+  let hs = 0;
+  mol.atoms.forEach(a => { counts[a.el] = (counts[a.el] || 0) + 1; hs += a.h; });
+  if (hs) counts.H = (counts.H || 0) + hs;
+  const rank = e => e === "C" ? 0 : e === "H" ? 1 : 2;
+  let order = Object.keys(counts).sort((x, y) => rank(x) - rank(y) || x.localeCompare(y));
+  // Konvention statt Hill-System: NH3/PH3 mit Element zuerst
+  const nonH = order.filter(e => e !== "H");
+  if (!counts.C && nonH.length === 1 && (nonH[0] === "N" || nonH[0] === "P")) {
+    order = counts.H ? [nonH[0], "H"] : [nonH[0]];
+  }
+  return order
+    .map(el => el + (counts[el] > 1 ? "<sub>" + counts[el] + "</sub>" : ""))
+    .join("");
+}
+
+/* ---------- Namenseingabe: Trivialnamen + einfache deutsche Nomenklatur ---------- */
+const TRIVIAL_NAMES = {
+  wasser: "H2O", ammoniak: "NH3", kohlenstoffdioxid: "CO2", kohlendioxid: "CO2",
+  methanol: "CH3-OH", ethanol: "CH3-CH2-OH", ethylalkohol: "CH3-CH2-OH",
+  formaldehyd: "C=O", acetaldehyd: "CH3-CHO",
+  aceton: "CH3-CO-CH3", ameisensäure: "C(=O)O", essigsäure: "CH3-COOH",
+  milchsäure: "CH3-CH(OH)-COOH", glycerin: "HO-CH2-CH(OH)-CH2-OH",
+  ethylenglycol: "HO-CH2-CH2-OH",
+  ethylen: "CH2=CH2", acetylen: "HC#CH",
+  benzol: "c1ccccc1", toluol: "Cc1ccccc1", styrol: "C=Cc1ccccc1",
+  phenol: "Oc1ccccc1", anilin: "Nc1ccccc1"
+};
+
+const NAME_STEMS = { undec: 11, dodec: 12, meth: 1, eth: 2, prop: 3, but: 4, pent: 5, hex: 6, hept: 7, oct: 8, okt: 8, non: 9, dec: 10, dek: 10 };
+const NAME_MULT = { di: 2, tri: 3, tetra: 4 };
+const NAME_SUBST = { methyl: "C", ethyl: "CC", propyl: "CCC", butyl: "CCCC", chlor: "Cl", brom: "Br", fluor: "F", iod: "I", hydroxy: "OH", amino: "N" };
+
+function parseGermanName(rawName) {
+  const err = msg => { throw new Error(msg); };
+  const parsePositions = str => str.split(",").map(x => parseInt(x, 10));
+  let s = rawName.trim().toLowerCase().replace(/\s+/g, "").replace(/^n-/, "");
+  if (!s) err("Leere Eingabe");
+  if (TRIVIAL_NAMES[s]) return parseStructure(TRIVIAL_NAMES[s]);
+
+  // 1) Suffix (funktionelle Gruppe) am Ende abtrennen
+  let suffix = null, sufPos = null, sufMult = 1, m;
+  if ((m = s.match(/(di)?säure$/))) { suffix = "säure"; sufMult = m[1] ? 2 : 1; }
+  else if ((m = s.match(/-?(?:(\d+(?:,\d+)*)-?)?(di|tri)?ol$/))) { suffix = "ol"; sufPos = m[1] ? parsePositions(m[1]) : null; sufMult = m[2] ? NAME_MULT[m[2]] : 1; }
+  else if ((m = s.match(/(di)?al$/))) { suffix = "al"; sufMult = m[1] ? 2 : 1; }
+  else if ((m = s.match(/-?(?:(\d+(?:,\d+)*)-?)?(di)?on$/))) { suffix = "on"; sufPos = m[1] ? parsePositions(m[1]) : null; sufMult = m[2] ? 2 : 1; }
+  else if ((m = s.match(/-?(?:(\d+(?:,\d+)*)-?)?amin$/))) { suffix = "amin"; sufPos = m[1] ? parsePositions(m[1]) : null; }
+  if (m) s = s.slice(0, -m[0].length);
+
+  // Sonderfall Alkylamine: "Ethylamin", "Methylamin"
+  if (suffix === "amin" && /yl$/.test(s)) {
+    const stem = s.slice(0, -2);
+    if (NAME_STEMS[stem]) {
+      const mol = newMol();
+      const chain = [];
+      for (let k = 0; k < NAME_STEMS[stem]; k++) {
+        chain.push(addMolAtom(mol, "C"));
+        if (k > 0) addMolBond(mol, chain[k - 1], chain[k], 1);
+      }
+      addMolBond(mol, chain[0], addMolAtom(mol, "N"), 1);
+      return mol;
+    }
+  }
+
+  // 2) Mehrfachbindungen: -an, -en, -in (mit Positionen)
+  let dbl = null, trp = null;
+  if ((m = s.match(/an$/))) { s = s.slice(0, -2); }
+  else if ((m = s.match(/-?(?:(\d+(?:,\d+)*)-?)?(?:a-?)?(di|tri)?en$/))) {
+    dbl = { pos: m[1] ? parsePositions(m[1]) : null, mult: m[2] ? NAME_MULT[m[2]] : 1 };
+    s = s.slice(0, -m[0].length);
+  }
+  else if ((m = s.match(/-?(?:(\d+(?:,\d+)*)-?)?(?:a-?)?(di)?in$/))) {
+    trp = { pos: m[1] ? parsePositions(m[1]) : null, mult: m[2] ? 2 : 1 };
+    s = s.slice(0, -m[0].length);
+  }
+  s = s.replace(/a$/, ""); // Bindevokal (buta-1,3-dien)
+
+  // 3) Substituenten-Vorsilben von vorn lesen
+  const subs = [];
+  let pendingPos = null, i = 0;
+  while (i < s.length) {
+    const save = i;
+    let positions = null;
+    let mm = s.slice(i).match(/^-?(\d+(?:,\d+)*)-?/);
+    if (mm) { positions = parsePositions(mm[1]); i += mm[0].length; }
+    const mm2 = s.slice(i).match(/^(di|tri|tetra)?(methyl|ethyl|propyl|butyl|chlor|brom|fluor|iod|hydroxy|amino)/);
+    if (mm2) {
+      subs.push({ name: mm2[2], positions: positions || [], mult: mm2[1] ? NAME_MULT[mm2[1]] : 1 });
+      i += mm2[0].length;
+      if (s[i] === "-") i++;
+      continue;
+    }
+    if (positions) { pendingPos = positions; break; }
+    i = save;
+    break;
+  }
+  s = s.slice(i);
+
+  // 4) cyclo + Stamm
+  let cyclo = false;
+  if (s.startsWith("cyclo")) { cyclo = true; s = s.slice(5); }
+  if (!(s in NAME_STEMS)) {
+    err(`„${rawName.trim()}“ nicht als Name erkannt. Unterstützt werden z. B. Ethanol, 2-Methylbutan, But-2-en, Propan-2-ol, Essigsäure, Cyclohexan.`);
+  }
+  const n = NAME_STEMS[s];
+
+  // 5) Molekül bauen
+  const mol = newMol();
+  const chain = [];
+  for (let k = 0; k < n; k++) chain.push(addMolAtom(mol, "C"));
+  const chainOrder = new Array(Math.max(0, n - 1)).fill(1);
+  const setUnsat = (u, order, label) => {
+    if (!u) return;
+    let posList = u.pos || pendingPos;
+    if (posList) pendingPos = null;
+    if (!posList) { if (u.mult === 1) posList = [1]; else err(`Bitte Positionen angeben, z. B. Buta-1,3-dien`); }
+    if (posList.length !== u.mult) err(`Anzahl der Positionen passt nicht zu di/tri (${label})`);
+    posList.forEach(p => {
+      if (p < 1 || p > n - 1) err(`${label} an Position ${p} gibt es bei ${n} C-Atomen nicht`);
+      chainOrder[p - 1] = order;
+    });
+  };
+  // Suffix-Positionen haben Vorrang vor pendingPos ("2-Propanol")
+  if (suffix && !sufPos && pendingPos) { sufPos = pendingPos; pendingPos = null; }
+  setUnsat(dbl, 2, "Doppelbindung");
+  setUnsat(trp, 3, "Dreifachbindung");
+  for (let k = 0; k < n - 1; k++) addMolBond(mol, chain[k], chain[k + 1], chainOrder[k]);
+  if (cyclo) {
+    if (n < 3) err("Ein Ring braucht mindestens 3 C-Atome");
+    addMolBond(mol, chain[n - 1], chain[0], 1);
+  }
+
+  const attach = (pos, what) => {
+    if (pos < 1 || pos > n) err(`Position ${pos} gibt es bei ${n} C-Atomen nicht`);
+    const at = chain[pos - 1];
+    if (/^C+$/.test(what)) {
+      let prev = at;
+      for (const c of what) { const c2 = addMolAtom(mol, "C"); addMolBond(mol, prev, c2, 1); prev = c2; }
+    } else if (what === "OH") { addMolBond(mol, at, addMolAtom(mol, "O"), 1); }
+    else if (what === "N") { addMolBond(mol, at, addMolAtom(mol, "N"), 1); }
+    else if (what === "=O") { addMolBond(mol, at, addMolAtom(mol, "O"), 2); }
+    else { addMolBond(mol, at, addMolAtom(mol, what), 1); }
+  };
+
+  subs.forEach(sub => {
+    let posList = sub.positions;
+    if (!posList.length) {
+      if (n === 1 && sub.mult === 1) posList = [1];
+      else err(`Bitte Position für „${sub.name}“ angeben, z. B. 2-${sub.name.charAt(0).toUpperCase() + sub.name.slice(1)}propan`);
+    }
+    if (posList.length !== sub.mult) err(`Bei „${sub.name}“ passt die Anzahl der Positionen nicht zu di/tri/tetra`);
+    posList.forEach(p => attach(p, NAME_SUBST[sub.name]));
+  });
+
+  if (suffix === "säure") {
+    (sufMult === 2 ? [1, n] : [1]).forEach(p => { attach(p, "=O"); attach(p, "OH"); });
+  } else if (suffix === "ol") {
+    let posList = sufPos;
+    if (!posList) {
+      if (sufMult === 1) posList = [1];
+      else if (n === 2 && sufMult === 2) posList = [1, 2];
+      else err("Bitte Positionen angeben, z. B. Butan-1,4-diol");
+    }
+    if (posList.length !== sufMult) err("Anzahl der Positionen passt nicht zu di/tri");
+    posList.forEach(p => attach(p, "OH"));
+  } else if (suffix === "al") {
+    (sufMult === 2 ? [1, n] : [1]).forEach(p => attach(p, "=O"));
+  } else if (suffix === "on") {
+    let posList = sufPos;
+    if (!posList) { if (n === 3) posList = [2]; else err("Bitte Position angeben, z. B. Butan-2-on"); }
+    posList.forEach(p => attach(p, "=O"));
+  } else if (suffix === "amin") {
+    (sufPos || [1]).forEach(p => attach(p, "N"));
+  }
+  return mol;
+}
+
+// Formel ODER Name akzeptieren; liefert final geprüftes Molekül
+function parseStructOrName(input) {
+  let structErr;
+  try {
+    const mol = parseStructure(input);
+    finalizeMol(mol);
+    return mol;
+  } catch (e) { structErr = e; }
+  // Sieht die Eingabe nach einem Namen aus? (zwei Kleinbuchstaben in Folge kommen
+  // in Formeln nicht vor – außer in aromatischem SMILES, das oben schon geparst wurde)
+  if (/[a-zäöüß]{2}/.test(input) && /^[a-zäöüß0-9,\-\s]+$/i.test(input)) {
+    try {
+      const mol = parseGermanName(input);
+      finalizeMol(mol);
+      return mol;
+    } catch (nameErr) {
+      // Endet die Eingabe wie ein Name, ist dessen Fehlermeldung die hilfreichere
+      if (/(an|en|in|ol|al|on|säure|amin|yl)$/i.test(input.trim())) throw nameErr;
+      throw structErr;
+    }
+  }
+  throw structErr;
+}
+
+/* ---------- 2D-Layout: Zickzack-Ketten, ein Ring als regelmäßiges Vieleck ---------- */
+function layoutMol(mol, L, geometry) {
+  const n = mol.atoms.length;
+  const adj = Array.from({ length: n }, () => []);
+  mol.bonds.forEach((b, bi) => { adj[b.a].push({ to: b.b, bi }); adj[b.b].push({ to: b.a, bi }); });
+  if (mol.bonds.length > n) throw new Error("Mehrere oder kondensierte Ringe werden noch nicht unterstützt");
+  const pos = new Array(n).fill(null);
+  const D30 = Math.PI / 6, D90 = Math.PI / 2;
+  const linear = geometry === "linear";
+
+  function subtreeSize(ai, from) {
+    let c = 1;
+    for (const { to } of adj[ai]) if (to !== from && pos[to] === null) c += subtreeSize(to, ai);
+    return c;
+  }
+
+  function growFrom(ai, heading, parity) {
+    const kids = adj[ai].map(e => e.to).filter(t => pos[t] === null);
+    kids.sort((a, b) => subtreeSize(b, ai) - subtreeSize(a, ai));
+    const contSign = parity ? -1 : 1;
+    kids.forEach((k, ki) => {
+      let angle, nh, np;
+      if (ki === 0) {
+        angle = linear ? heading : heading + contSign * D30;
+        nh = heading; np = 1 - parity;
+      }
+      else if (ki === 1) { angle = heading - contSign * D90; nh = angle; np = 0; }
+      else if (ki === 2) { angle = heading + contSign * D90; nh = angle; np = 0; }
+      else { angle = heading + Math.PI; nh = angle; np = 0; }
+      pos[k] = [pos[ai][0] + L * Math.cos(angle), pos[ai][1] + L * Math.sin(angle)];
+      growFrom(k, nh, np);
+    });
+  }
+
+  if (mol.bonds.length === n) {
+    // genau ein Ring
+    const seen = new Array(n).fill(false);
+    let cyc = null;
+    (function dfs(u, p, path) {
+      seen[u] = true; path.push(u);
+      for (const { to } of adj[u]) {
+        if (cyc) return;
+        if (to === p) continue;
+        if (seen[to]) { cyc = path.slice(path.indexOf(to)); return; }
+        dfs(to, u, path);
+      }
+      if (cyc) return;
+      path.pop();
+    })(0, -1, []);
+    if (!cyc) throw new Error("Ringstruktur nicht gefunden");
+    const m = cyc.length;
+    const R = L / (2 * Math.sin(Math.PI / m));
+    cyc.forEach((ai, k) => {
+      const ang = -Math.PI / 2 + k * 2 * Math.PI / m;
+      pos[ai] = [R * Math.cos(ang), R * Math.sin(ang)];
+    });
+    mol.ringSet = new Set(cyc);
+    cyc.forEach(ai => {
+      const radial = Math.atan2(pos[ai][1], pos[ai][0]);
+      const kids = adj[ai].map(e => e.to).filter(t => pos[t] === null);
+      kids.forEach((k, ki) => {
+        const angle = radial + (ki === 0 ? 0 : (ki === 1 ? 2 * D30 : -2 * D30));
+        pos[k] = [pos[ai][0] + L * Math.cos(angle), pos[ai][1] + L * Math.sin(angle)];
+        growFrom(k, angle, 0);
+      });
+    });
+  } else {
+    mol.ringSet = new Set();
+    let start = 0;
+    if (n > 1) {
+      const far = src => {
+        const dist = new Array(n).fill(-1);
+        const q = [src]; dist[src] = 0; let f = src;
+        while (q.length) {
+          const u = q.shift();
+          for (const { to } of adj[u]) if (dist[to] < 0) { dist[to] = dist[u] + 1; if (dist[to] > dist[f]) f = to; q.push(to); }
+        }
+        return f;
+      };
+      start = far(far(0)); // Ende der längsten Kette
+    }
+    pos[start] = [0, 0];
+    growFrom(start, 0, 0);
+  }
+  mol.pos = pos;
+}
+
+/* ---------- Molekül-Renderer (Skelettformel / ausgeschrieben) ---------- */
+function renderMolecule(canvas, mol, style, opts) {
+  const fs = Math.max(10, Math.round(opts.fontSize * 0.72));
+  const L = opts.fontSize * 1.6;
+  layoutMol(mol, L, opts.geometry || "zigzag");
+  const pos = mol.pos;
+  const n = mol.atoms.length;
+  const ctx = canvas.getContext("2d");
+  const fontN = `${fs}px ${opts.fontFamily}`;
+  const fontS = `${Math.round(fs * 0.72)}px ${opts.fontFamily}`;
+
+  const heavyDeg = new Array(n).fill(0);
+  mol.bonds.forEach(b => { heavyDeg[b.a]++; heavyDeg[b.b]++; });
+
+  // Label + Ankerpunkt (welches Zeichen auf der Atomposition sitzt)
+  function skeletonLabel(a, i) {
+    if (a.el === "C" && heavyDeg[i] > 0) return null;
+    const hTxt = a.h ? "H" + (a.h > 1 ? a.h : "") : "";
+    if (heavyDeg[i] === 0) { // Einzelmolekül wie CH4, H2O, NH3
+      if (a.el === "O" || a.el === "S") return { t: hTxt + a.el, anchor: "center" };
+      return { t: a.el + hTxt, anchor: "center" };
+    }
+    if (!a.h) return { t: a.el, anchor: "center" };
+    // endständige Heteroatome: H auf die bindungsabgewandte Seite schreiben
+    const nb = mol.bonds.find(b => b.a === i || b.b === i);
+    const other = nb.a === i ? nb.b : nb.a;
+    if (heavyDeg[i] === 1 && pos[other][0] > pos[i][0] + 1)
+      return { t: hTxt + a.el, anchor: "last" };
+    if (heavyDeg[i] === 1)
+      return { t: a.el + hTxt, anchor: "first" };
+    return { t: a.el + hTxt, anchor: "center" };
+  }
+  const labels = mol.atoms.map((a, i) =>
+    style === "full" ? { t: a.el, anchor: "center" } : skeletonLabel(a, i));
+
+  // explizite H-Atome (nur "ausgeschrieben"): freie Richtungen suchen,
+  // Kollisionen mit anderen Atomen und bereits gesetzten H vermeiden
+  const hNodes = [];
+  const hAngles = {}; // Richtungen der gesetzten H je Atom (für Elektronenpaare)
+  if (style === "full") {
+    const occupied = pos.map(p => p); // Schweratome; platzierte H kommen dazu
+    for (let i = 0; i < n; i++) {
+      const hCount = mol.atoms[i].h;
+      if (!hCount) continue;
+      const taken = [];
+      mol.bonds.forEach(b => {
+        const o = b.a === i ? b.b : (b.b === i ? b.a : -1);
+        if (o >= 0) taken.push(Math.atan2(pos[o][1] - pos[i][1], pos[o][0] - pos[i][0]));
+      });
+      for (let k = 0; k < hCount; k++) {
+        let best = 0, bestScore = -Infinity;
+        for (let c = 0; c < 12; c++) {
+          const ang = c * Math.PI / 6;
+          let mind = 2 * Math.PI;
+          taken.forEach(t => {
+            let d = Math.abs(ang - t) % (2 * Math.PI);
+            if (d > Math.PI) d = 2 * Math.PI - d;
+            mind = Math.min(mind, d);
+          });
+          const hx = pos[i][0] + L * 0.72 * Math.cos(ang);
+          const hy = pos[i][1] + L * 0.72 * Math.sin(ang);
+          let clash = false;
+          for (const q of occupied) {
+            if (q === pos[i]) continue;
+            if (Math.hypot(q[0] - hx, q[1] - hy) < L * 0.6) { clash = true; break; }
+          }
+          // Achsenlagen (0°/90°/180°/270°) leicht bevorzugen – wirkt ruhiger
+          const score = mind - (clash ? 10 : 0) + (c % 3 === 0 ? 0.05 : 0);
+          if (score > bestScore + 1e-9) { bestScore = score; best = ang; }
+        }
+        taken.push(best);
+        (hAngles[i] = hAngles[i] || []).push(best);
+        const node = { from: i, x: pos[i][0] + L * 0.72 * Math.cos(best), y: pos[i][1] + L * 0.72 * Math.sin(best) };
+        hNodes.push(node);
+        occupied.push([node.x, node.y]);
+      }
+    }
+  }
+
+  // freie Elektronenpaare (optional, nur "ausgeschrieben"): kurze Striche in freien Richtungen
+  const lpMarks = [];
+  if (style === "full" && opts.lonePairs) {
+    const VE = { C: 4, N: 5, O: 6, S: 6, P: 5, F: 7, Cl: 7, Br: 7, I: 7 };
+    for (let i = 0; i < n; i++) {
+      const a = mol.atoms[i];
+      const bondSum = mol.bonds.reduce((s2, b) => s2 + ((b.a === i || b.b === i) ? b.order : 0), 0) + a.h;
+      const lp = Math.floor(((VE[a.el] || 0) - bondSum) / 2);
+      if (lp <= 0) continue;
+      const taken = [];
+      mol.bonds.forEach(b => {
+        const o = b.a === i ? b.b : (b.b === i ? b.a : -1);
+        if (o >= 0) taken.push(Math.atan2(pos[o][1] - pos[i][1], pos[o][0] - pos[i][0]));
+      });
+      (hAngles[i] || []).forEach(t => taken.push(t));
+      for (let k = 0; k < lp; k++) {
+        let best = 0, bestScore = -Infinity;
+        for (let c = 0; c < 12; c++) {
+          const ang = c * Math.PI / 6;
+          let mind = 2 * Math.PI;
+          taken.forEach(t => {
+            let d = Math.abs(ang - t) % (2 * Math.PI);
+            if (d > Math.PI) d = 2 * Math.PI - d;
+            mind = Math.min(mind, d);
+          });
+          if (mind > bestScore + 1e-9) { bestScore = mind; best = ang; }
+        }
+        taken.push(best);
+        lpMarks.push({ i, x: pos[i][0], y: pos[i][1], ang: best });
+      }
+    }
+  }
+
+  // Maße bestimmen (Font muss vor dem Resize gesetzt sein)
+  function segWidths(text) {
+    const ws = [];
+    for (const ch of text) { ctx.font = /\d/.test(ch) ? fontS : fontN; ws.push(ctx.measureText(ch).width); }
+    return ws;
+  }
+  function anchorShift(lb) {
+    // Verschiebung, damit das Ankerzeichen auf der Atomposition liegt
+    const ws = segWidths(lb.t);
+    const total = ws.reduce((a2, b2) => a2 + b2, 0);
+    if (lb.anchor === "first") return { shift: ws[0] / 2, total };
+    if (lb.anchor === "last") return { shift: total - ws[ws.length - 1] / 2, total };
+    return { shift: total / 2, total };
+  }
+  const clear = new Array(n).fill(0);
+  const draws = [];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const consider = (x, y, r) => {
+    minX = Math.min(minX, x - r); maxX = Math.max(maxX, x + r);
+    minY = Math.min(minY, y - r); maxY = Math.max(maxY, y + r);
+  };
+  mol.atoms.forEach((a, i) => {
+    const lb = labels[i];
+    if (lb) {
+      const { shift, total } = anchorShift(lb);
+      clear[i] = lb.anchor === "center" ? total / 2 + fs * 0.15 : fs * 0.55;
+      draws.push({ lb, x: pos[i][0], y: pos[i][1], shift });
+      consider(pos[i][0] - shift, pos[i][1], fs * 0.75);
+      consider(pos[i][0] - shift + total, pos[i][1], fs * 0.75);
+    } else {
+      consider(pos[i][0], pos[i][1], fs * 0.2);
+    }
+  });
+  hNodes.forEach(hn => consider(hn.x, hn.y, fs * 0.75));
+  // Abstand der Elektronenpaare richtet sich nach der Label-Breite (z. B. "Cl")
+  lpMarks.forEach(m2 => { m2.r = clear[m2.i] + fs * 0.33; });
+  lpMarks.forEach(m2 => consider(m2.x + m2.r * Math.cos(m2.ang), m2.y + m2.r * Math.sin(m2.ang), fs * 0.4));
+
+  const pad = fs * 0.8;
+  const w = Math.ceil(maxX - minX + 2 * pad), h = Math.ceil(maxY - minY + 2 * pad);
+  canvas.width = Math.max(1, Math.round(w * opts.scale));
+  canvas.height = Math.max(1, Math.round(h * opts.scale));
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
+  ctx.setTransform(opts.scale, 0, 0, opts.scale, 0, 0);
+  if (opts.background) { ctx.fillStyle = opts.background; ctx.fillRect(0, 0, w, h); }
+  else ctx.clearRect(0, 0, w, h);
+  ctx.translate(pad - minX, pad - minY);
+  ctx.strokeStyle = "#111111";
+  ctx.fillStyle = "#111111";
+  ctx.lineWidth = Math.max(1.4, fs * 0.09);
+  ctx.lineCap = "round";
+
+  // Bindungen
+  const ringArr = [...(mol.ringSet || [])];
+  const ringCenter = ringArr.length
+    ? [ringArr.reduce((s2, i2) => s2 + pos[i2][0], 0) / ringArr.length,
+       ringArr.reduce((s2, i2) => s2 + pos[i2][1], 0) / ringArr.length]
+    : null;
+  function line(x1, y1, x2, y2) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+  function bondLine(i, j, offset, shorten) {
+    const [x1, y1] = pos[i], [x2, y2] = pos[j];
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len, qx = -uy, qy = ux;
+    const t1 = clear[i] + shorten, t2 = clear[j] + shorten;
+    line(x1 + ux * t1 + qx * offset, y1 + uy * t1 + qy * offset,
+         x2 - ux * t2 + qx * offset, y2 - uy * t2 + qy * offset);
+  }
+  mol.bonds.forEach(b => {
+    const off = fs * 0.14;
+    const isRing = mol.ringSet.has(b.a) && mol.ringSet.has(b.b);
+    if (b.order === 1) bondLine(b.a, b.b, 0, 0);
+    else if (b.order === 2 && isRing && ringCenter) {
+      bondLine(b.a, b.b, 0, 0);
+      const [xa, ya] = pos[b.a], [xb, yb] = pos[b.b];
+      const mx = (xa + xb) / 2, my = (ya + yb) / 2;
+      const qx = -(yb - ya), qy = xb - xa;
+      const sgn = (qx * (ringCenter[0] - mx) + qy * (ringCenter[1] - my)) > 0 ? 1 : -1;
+      bondLine(b.a, b.b, sgn * off * 1.8, L * 0.16);
+    } else if (b.order === 2) {
+      bondLine(b.a, b.b, off, 0);
+      bondLine(b.a, b.b, -off, 0);
+    } else {
+      bondLine(b.a, b.b, 0, 0);
+      bondLine(b.a, b.b, off * 1.9, 0);
+      bondLine(b.a, b.b, -off * 1.9, 0);
+    }
+  });
+
+  // Bindungen zu expliziten H-Atomen
+  hNodes.forEach(hn => {
+    const [x1, y1] = pos[hn.from];
+    const dx = hn.x - x1, dy = hn.y - y1, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    line(x1 + ux * clear[hn.from], y1 + uy * clear[hn.from],
+         hn.x - ux * fs * 0.45, hn.y - uy * fs * 0.45);
+  });
+
+  // freie Elektronenpaare: Strich tangential zur Atomrichtung
+  lpMarks.forEach(m2 => {
+    const px = Math.cos(m2.ang), py = Math.sin(m2.ang);
+    const cx2 = m2.x + m2.r * px, cy2 = m2.y + m2.r * py;
+    const hl = fs * 0.3, qx = -py, qy = px;
+    line(cx2 - qx * hl, cy2 - qy * hl, cx2 + qx * hl, cy2 + qy * hl);
+  });
+
+  // Atom-Labels
+  function drawLabel(text, x, y, shift) {
+    let cx = x - shift;
+    for (const ch of text) {
+      const sub = /\d/.test(ch);
+      ctx.font = sub ? fontS : fontN;
+      ctx.fillText(ch, cx, y + (sub ? fs * 0.55 : fs * 0.35));
+      cx += ctx.measureText(ch).width;
+    }
+  }
+  draws.forEach(d => drawLabel(d.lb.t, d.x, d.y, d.shift));
+  ctx.font = fontN;
+  hNodes.forEach(hn => drawLabel("H", hn.x, hn.y, ctx.measureText("H").width / 2));
+  return { w, h };
+}
+
+/* ---------- SVG-Export: Zeichenfläche mit Canvas-API, die SVG-Elemente erzeugt ---------- */
+function createSvgTarget() {
+  const measCtx = document.createElement("canvas").getContext("2d");
+  const els = [];
+  const state = { font: "16px Arial", fillStyle: "#000", strokeStyle: "#000", lineWidth: 1, lineCap: "butt" };
+  const tf = { s: 1, tx: 0, ty: 0 };
+  let path = [];
+  const X = x => (x * tf.s + tf.tx).toFixed(2);
+  const Y = y => (y * tf.s + tf.ty).toFixed(2);
+  const esc = v => String(v).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  function fontParts() {
+    const m = state.font.match(/(\d+(?:\.\d+)?)px\s+(.+)/);
+    return { size: m ? parseFloat(m[1]) : 16, family: m ? m[2] : "Arial" };
+  }
+  const ctx = {
+    set font(v) { state.font = v; },
+    get font() { return state.font; },
+    set fillStyle(v) { state.fillStyle = v; },
+    get fillStyle() { return state.fillStyle; },
+    set strokeStyle(v) { state.strokeStyle = v; },
+    get strokeStyle() { return state.strokeStyle; },
+    set lineWidth(v) { state.lineWidth = v; },
+    get lineWidth() { return state.lineWidth; },
+    set lineCap(v) { state.lineCap = v; },
+    get lineCap() { return state.lineCap; },
+    set textBaseline(v) { /* alphabetic = SVG-Standard */ },
+    measureText(t) { measCtx.font = state.font; return measCtx.measureText(t); },
+    fillText(t, x, y) {
+      const f = fontParts();
+      els.push(`<text x="${X(x)}" y="${Y(y)}" font-family="${esc(f.family)}" font-size="${(f.size * tf.s).toFixed(2)}" fill="${esc(state.fillStyle)}">${esc(t)}</text>`);
+    },
+    beginPath() { path = []; },
+    moveTo(x, y) { path.push(`M ${X(x)} ${Y(y)}`); },
+    lineTo(x, y) { path.push(`L ${X(x)} ${Y(y)}`); },
+    stroke() {
+      if (path.length) els.push(`<path d="${path.join(" ")}" stroke="${esc(state.strokeStyle)}" stroke-width="${(state.lineWidth * tf.s).toFixed(2)}" stroke-linecap="${esc(state.lineCap)}" fill="none"/>`);
+    },
+    fillRect(x, y, w2, h2) {
+      els.push(`<rect x="${X(x)}" y="${Y(y)}" width="${(w2 * tf.s).toFixed(2)}" height="${(h2 * tf.s).toFixed(2)}" fill="${esc(state.fillStyle)}"/>`);
+    },
+    clearRect() {},
+    setTransform(a, b, c, d, e, f2) { tf.s = a; tf.tx = e; tf.ty = f2; },
+    translate(x, y) { tf.tx += x * tf.s; tf.ty += y * tf.s; }
+  };
+  const target = {
+    width: 0, height: 0, style: {},
+    getContext() { return ctx; },
+    toSVG() {
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${target.width} ${target.height}" width="${target.width}" height="${target.height}">` +
+        els.join("") + "</svg>";
+    }
+  };
+  return target;
+}
+
+/* ---------- UI ---------- */
+const $ = id => document.getElementById(id);
+const eqInput = $("eq"), feedback = $("feedback"), statusEl = $("status");
+const previewCanvas = $("preview"), previewCard = $("previewCard"), previewPlaceholder = $("previewPlaceholder");
+const btnCopy = $("copyPng"), btnDl = $("dlPng"), btnSvg = $("dlSvg"), btnLink = $("copyLink"), btnAdd = $("addToSheet");
+const epCb = $("epPairs");
+const sheetSection = $("sheetSection"), sheetList = $("sheetList"), sheetCount = $("sheetCount"), sheetTitleIn = $("sheetTitle");
+const gapCb = $("gapCoefs"), solCb = $("withSolution");
+const fontSel = $("font"), sizeRange = $("size"), sizeVal = $("sizeVal"), transparentCb = $("transparent");
+const modeAutoBtn = $("modeAuto"), modeCheckBtn = $("modeCheck"), modeStructBtn = $("modeStruct"), modeHint = $("modeHint");
+const styleSkeletonBtn = $("styleSkeleton"), styleFullBtn = $("styleFull"), structOptions = $("structOptions");
+const geoZigzagBtn = $("geoZigzag"), geoLinearBtn = $("geoLinear");
+const examplesSel = $("examples");
+
+let mode = "auto";            // "auto" | "check" | "struct"
+let structStyle = "skeleton"; // "skeleton" | "full"
+let structGeo = "zigzag";     // "zigzag" | "linear" (nur bei "full" wirksam)
+let currentDraw = null;       // (canvas, {scale, background}) => void
+let currentMol = null;        // aktuelles Molekül (für 3D-Ansicht)
+
+const HINTS = {
+  auto: "Edukte und Produkte ohne Koeffizienten eingeben – das Tool berechnet die kleinsten ganzzahligen Koeffizienten.",
+  check: "Gleichung mit selbst gewählten Koeffizienten eingeben (z. B. „2 H2 + O2 -> 2 H2O“) – das Tool prüft, ob sie ausgeglichen ist.",
+  struct: "Molekül als Halbstrukturformel (CH3-CH(CH3)-OH), SMILES (CCO) oder Name (Propan-2-ol, Essigsäure) eingeben – Darstellung als Skelettformel oder mit ausgeschriebenen C und H."
+};
+const PLACEHOLDERS = {
+  auto: "z. B. CH4 + O2 -> CO2 + H2O",
+  check: "z. B. 2 H2 + O2 -> 2 H2O",
+  struct: "z. B. CH3-CH2-OH, CCO oder Ethanol"
+};
+const EXAMPLES = {
+  eq: [
+    "CH4 + O2 -> CO2 + H2O", "Fe + O2 -> Fe2O3", "Al + HCl -> AlCl3 + H2",
+    "N2 + H2 <-> NH3", "C6H12O6 + O2 -> CO2 + H2O", "Ca(OH)2 + HCl -> CaCl2 + H2O",
+    "CuSO4*5H2O -> CuSO4 + H2O", "Na (s) + H2O (l) -> NaOH (aq) + H2 (g)",
+    "Al + Ag+ -> Al^3+ + Ag", "MnO4^- + Fe^2+ + H+ -> Mn^2+ + Fe^3+ + H2O",
+    "Cu^2+ + e- -> Cu", "Cr2O7^2- + H+ + e- -> Cr^3+ + H2O"
+  ].map(v => [v, v]),
+  struct: [
+    ["CH3-CH2-OH", "Ethanol – CH3-CH2-OH"],
+    ["CH3-COOH", "Essigsäure – CH3-COOH"],
+    ["CH3-CHO", "Ethanal – CH3-CHO"],
+    ["CH3-CO-CH3", "Aceton – CH3-CO-CH3"],
+    ["CH3-CH(CH3)-CH2-CH3", "2-Methylbutan – CH3-CH(CH3)-CH2-CH3"],
+    ["C(CH3)4", "Neopentan – C(CH3)4"],
+    ["CH2=CH2", "Ethen – CH2=CH2"],
+    ["HC#CH", "Ethin – HC#CH"],
+    ["CH3-CH2-NH2", "Ethylamin – CH3-CH2-NH2"],
+    ["CH3-CH(OH)-COOH", "Milchsäure – CH3-CH(OH)-COOH"],
+    ["C1CCCCC1", "Cyclohexan – C1CCCCC1"],
+    ["c1ccccc1", "Benzol – c1ccccc1"],
+    ["2-Methylbutan", "Name: 2-Methylbutan"],
+    ["Propan-2-ol", "Name: Propan-2-ol"],
+    ["But-2-en", "Name: But-2-en"],
+    ["Butansäure", "Name: Butansäure"],
+    ["2,2-Dimethylpropan", "Name: 2,2-Dimethylpropan"]
+  ]
+};
+
+function fillExamples(kind) {
+  examplesSel.innerHTML = "";
+  const first = document.createElement("option");
+  first.value = ""; first.textContent = "Beispiele …";
+  examplesSel.appendChild(first);
+  EXAMPLES[kind].forEach(([v, label]) => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = label;
+    examplesSel.appendChild(o);
+  });
+}
+
+function setMode(m) {
+  mode = m;
+  [[modeAutoBtn, "auto"], [modeCheckBtn, "check"], [modeStructBtn, "struct"]].forEach(([btn, v]) => {
+    btn.classList.toggle("active", m === v);
+    btn.setAttribute("aria-pressed", String(m === v));
+  });
+  structOptions.hidden = m !== "struct";
+  $("view3d").hidden = m !== "struct";
+  modeHint.textContent = HINTS[m];
+  eqInput.placeholder = PLACEHOLDERS[m];
+  fillExamples(m === "struct" ? "struct" : "eq");
+  update();
+}
+modeAutoBtn.addEventListener("click", () => setMode("auto"));
+modeCheckBtn.addEventListener("click", () => setMode("check"));
+modeStructBtn.addEventListener("click", () => setMode("struct"));
+
+function setStructStyle(s) {
+  structStyle = s;
+  styleSkeletonBtn.classList.toggle("active", s === "skeleton");
+  styleFullBtn.classList.toggle("active", s === "full");
+  styleSkeletonBtn.setAttribute("aria-pressed", String(s === "skeleton"));
+  styleFullBtn.setAttribute("aria-pressed", String(s === "full"));
+  // Geometrie/Elektronenpaare nur bei ausgeschriebenen Strukturen wählbar
+  geoZigzagBtn.disabled = geoLinearBtn.disabled = epCb.disabled = s !== "full";
+  update();
+}
+styleSkeletonBtn.addEventListener("click", () => setStructStyle("skeleton"));
+styleFullBtn.addEventListener("click", () => setStructStyle("full"));
+
+function setStructGeo(g) {
+  structGeo = g;
+  geoZigzagBtn.classList.toggle("active", g === "zigzag");
+  geoLinearBtn.classList.toggle("active", g === "linear");
+  geoZigzagBtn.setAttribute("aria-pressed", String(g === "zigzag"));
+  geoLinearBtn.setAttribute("aria-pressed", String(g === "linear"));
+  update();
+}
+geoZigzagBtn.addEventListener("click", () => setStructGeo("zigzag"));
+geoLinearBtn.addEventListener("click", () => setStructGeo("linear"));
+epCb.addEventListener("change", update);
+
+examplesSel.addEventListener("change", e => {
+  if (e.target.value) {
+    eqInput.value = e.target.value;
+    e.target.selectedIndex = 0;
+    update();
+    eqInput.focus();
+  }
+});
+
+function setStatus(text, cls) {
+  statusEl.textContent = text || "";
+  statusEl.className = "status" + (cls ? " " + cls : "");
+}
+
+// drawFn(canvas, {scale, background}) rendert Gleichung oder Molekül – für Vorschau und Export
+function eqDraw(segs) {
+  return (cv, o) => renderSegments(cv, segs, {
+    fontSize: parseInt(sizeRange.value, 10),
+    fontFamily: fontSel.value,
+    scale: o.scale,
+    background: o.background
+  });
+}
+function molDraw(mol) {
+  return (cv, o) => renderMolecule(cv, mol, structStyle, {
+    fontSize: parseInt(sizeRange.value, 10),
+    fontFamily: fontSel.value,
+    geometry: structStyle === "full" ? structGeo : "zigzag",
+    lonePairs: structStyle === "full" && epCb.checked,
+    scale: o.scale,
+    background: o.background
+  });
+}
+
+function showPreview(drawFn, ariaLabel) {
+  currentDraw = drawFn;
+  previewPlaceholder.hidden = true;
+  previewCanvas.hidden = false;
+  previewCard.classList.remove("empty");
+  const scale = Math.max(window.devicePixelRatio || 1, 2);
+  drawFn(previewCanvas, { scale, background: null });
+  previewCanvas.setAttribute("role", "img");
+  previewCanvas.setAttribute("aria-label", ariaLabel || "Vorschau");
+  btnCopy.disabled = btnDl.disabled = btnSvg.disabled = btnLink.disabled = btnAdd.disabled = false;
+  $("view3d").disabled = !currentMol;
+}
+
+function clearPreview(placeholderText) {
+  currentDraw = null;
+  previewCanvas.hidden = true;
+  previewPlaceholder.hidden = false;
+  previewPlaceholder.textContent = placeholderText || "Gib oben eine Reaktionsgleichung ein – die Vorschau erscheint hier.";
+  previewCard.classList.add("empty");
+  btnCopy.disabled = btnDl.disabled = btnSvg.disabled = btnLink.disabled = btnAdd.disabled = true;
+  $("view3d").disabled = true;
+}
+
+function update() {
+  setStatus("");
+  currentMol = null;
+  const raw = eqInput.value;
+  if (!raw.trim()) {
+    feedback.innerHTML = "";
+    clearPreview(mode === "struct"
+      ? "Gib oben eine Strukturformel oder SMILES ein – die Vorschau erscheint hier."
+      : "Gib oben eine Reaktionsgleichung ein – die Vorschau erscheint hier.");
+    return;
+  }
+
+  if (mode === "struct") {
+    try {
+      const mol = parseStructOrName(raw);
+      currentMol = mol;
+      const warnHtml = mol.warnings.length
+        ? `<br><span class="msg-warn">⚠ ${mol.warnings.map(escapeHtml).join(" · ")}</span>`
+        : "";
+      feedback.innerHTML = `<span class="msg-muted">Summenformel:</span> <b>${molFormula(mol)}</b>` + warnHtml;
+      const plainFormula = molFormula(mol).replace(/<\/?sub>/g, "");
+      showPreview(molDraw(mol), `Strukturformel zu ${raw.trim()}, Summenformel ${plainFormula}`);
+    } catch (err) {
+      feedback.innerHTML = `<span class="msg-err">${escapeHtml(err.message)}</span>`;
+      clearPreview("Struktur konnte nicht erzeugt werden.");
+    }
+    return;
+  }
+
+  let eq;
+  try {
+    eq = parseEquation(raw);
+  } catch (err) {
+    feedback.innerHTML = err.message ? `<span class="msg-muted">${escapeHtml(err.message)}</span>` : "";
+    clearPreview("…");
+    return;
+  }
+
+  if (mode === "auto") {
+    try {
+      const coefs = balance([...eq.left, ...eq.right], eq.left.length);
+      feedback.innerHTML = `<span class="msg-ok">✔ Ausgeglichen</span>`;
+      const segs = buildSegments(eq, coefs);
+      showPreview(eqDraw(segs), "Reaktionsgleichung: " + segsText(segs));
+    } catch (err) {
+      // "Fe3+" wird als Fe₃ mit Ladung + gelesen – vermutlich war Fe^3+ gemeint
+      const suspicious = [...eq.left, ...eq.right].some(sp => sp.bare && /\d$/.test(sp.formula));
+      const hint = suspicious
+        ? "<br><span class=\"msg-muted\">Tipp: Ladungszahlen mit ^ schreiben, z. B. <b>Fe^3+</b> – „Fe3+“ wird als 3 Fe-Atome mit Ladung 1+ gelesen.</span>"
+        : "";
+      feedback.innerHTML = `<span class="msg-err">${escapeHtml(err.message)}</span>` + hint;
+      clearPreview("Gleichung konnte nicht ausgeglichen werden.");
+    }
+  } else {
+    const res = checkBalance(eq);
+    let html = res.balanced
+      ? `<span class="msg-ok">✔ Die Gleichung ist ausgeglichen!</span>`
+      : `<span class="msg-err">✘ Noch nicht ausgeglichen – vergleiche die Atomanzahlen:</span>`;
+    html += "<table><tr><th>Element</th><th>links</th><th>rechts</th><th></th></tr>";
+    for (const row of res.rows) {
+      html += `<tr><td>${row.el}</td><td>${row.left}</td><td>${row.right}</td><td>${row.ok ? "✔" : "✘"}</td></tr>`;
+    }
+    html += "</table>";
+    feedback.innerHTML = html;
+    const segs = buildSegments(eq, null);
+    showPreview(eqDraw(segs), "Reaktionsgleichung: " + segsText(segs));
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+// Textdarstellung einer Segmentliste (für aria-label / Vorlesbarkeit)
+function segsText(segs) {
+  return segs.map(g => g.s).join("").replace(/\s+/g, " ").trim();
+}
+
+eqInput.addEventListener("input", update);
+fontSel.addEventListener("change", update);
+sizeRange.addEventListener("input", () => {
+  sizeVal.textContent = sizeRange.value;
+  update();
+});
+
+/* ---------- PNG-Export ---------- */
+function exportCanvas() {
+  const c = document.createElement("canvas");
+  currentDraw(c, {
+    scale: 4, // hohe Auflösung für Druck
+    background: transparentCb.checked ? null : "#ffffff"
+  });
+  return c;
+}
+
+btnCopy.addEventListener("click", async () => {
+  if (!currentDraw) return;
+  try {
+    const blob = await new Promise(res => exportCanvas().toBlob(res, "image/png"));
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    setStatus("✔ PNG in die Zwischenablage kopiert – jetzt z. B. in Word einfügen (Strg+V).", "ok");
+  } catch (err) {
+    setStatus("Kopieren nicht möglich (Browser-Einschränkung) – bitte „PNG herunterladen“ verwenden.", "err");
+  }
+});
+
+btnDl.addEventListener("click", () => {
+  if (!currentDraw) return;
+  exportCanvas().toBlob(blob => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = mode === "struct" ? "strukturformel.png" : "reaktionsgleichung.png";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    setStatus("✔ PNG heruntergeladen.", "ok");
+  }, "image/png");
+});
+
+btnSvg.addEventListener("click", () => {
+  if (!currentDraw) return;
+  const t = createSvgTarget();
+  currentDraw(t, { scale: 1, background: transparentCb.checked ? null : "#ffffff" });
+  const blob = new Blob([t.toSVG()], { type: "image/svg+xml" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = mode === "struct" ? "strukturformel.svg" : "reaktionsgleichung.svg";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  setStatus("✔ SVG heruntergeladen – verlustfrei skalierbar, z. B. für Word oder InDesign.", "ok");
+});
+
+/* ---------- Link teilen (für oEmbed / Einbetten konkreter Gleichungen) ---------- */
+btnLink.addEventListener("click", async () => {
+  const u = new URL(location.origin + location.pathname);
+  if (eqInput.value.trim()) u.searchParams.set("eq", eqInput.value.trim());
+  if (mode === "check") u.searchParams.set("mode", "check");
+  if (mode === "struct") {
+    u.searchParams.set("mode", "struct");
+    if (structStyle === "full") {
+      u.searchParams.set("stil", "voll");
+      if (structGeo === "linear") u.searchParams.set("form", "linear");
+      if (epCb.checked) u.searchParams.set("ep", "1");
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(u.toString());
+    setStatus("✔ Link kopiert – öffnet das Tool mit dieser Gleichung (auch zum Einbetten per oEmbed).", "ok");
+  } catch (err) {
+    setStatus("Kopieren nicht möglich – Link: " + u.toString(), "err");
+  }
+});
+
+/* ---------- 3D-Ansicht über JSmol (lädt erst bei Klick) ----------
+   Die Viewer-Seite 3d.html sucht JSmol selbst: erst im lokalen Ordner "jsmol/",
+   sonst auf https://intern.chemiedidaktik.fau.de/jsmol (dort per ?jsmol=… übersteuerbar). */
+const view3dBtn = $("view3d");
+
+// MOL-Datei (V2000) mit expliziten H-Atomen; JSmol optimiert die Geometrie danach selbst
+function molToMolfile(mol) {
+  layoutMol(mol, 40, "zigzag");
+  const pos = mol.pos, sc = 1.5 / 40; // Bindungslänge ≈ 1,5 Å
+  const atoms = [], bonds = [];
+  mol.atoms.forEach((a, i) => {
+    atoms.push({ el: a.el, x: pos[i][0] * sc, y: -pos[i][1] * sc, z: ((i % 3) - 1) * 0.12 });
+  });
+  mol.bonds.forEach(b => bonds.push([b.a + 1, b.b + 1, b.order]));
+  mol.atoms.forEach((a, i) => {
+    for (let k = 0; k < a.h; k++) {
+      const ang = k * 2.4 + i; // grobe Verteilung genügt vor dem Minimieren
+      atoms.push({ el: "H", x: pos[i][0] * sc + Math.cos(ang), y: -pos[i][1] * sc + Math.sin(ang), z: k % 2 ? 0.6 : -0.6 });
+      bonds.push([i + 1, atoms.length, 1]);
+    }
+  });
+  const f = v => v.toFixed(4).padStart(10);
+  let out = "ChEdit\n  erzeugt mit ChEdit\n\n";
+  out += String(atoms.length).padStart(3) + String(bonds.length).padStart(3) + "  0  0  0  0  0  0  0  0999 V2000\n";
+  atoms.forEach(a => { out += f(a.x) + f(a.y) + f(a.z) + " " + a.el.padEnd(3) + " 0  0  0  0  0  0  0  0  0  0  0  0\n"; });
+  bonds.forEach(b => { out += String(b[0]).padStart(3) + String(b[1]).padStart(3) + String(b[2]).padStart(3) + "  0\n"; });
+  return out + "M  END\n";
+}
+
+// Öffnet die mitgelieferte Viewer-Seite 3d.html in einem neuen Tab.
+view3dBtn.addEventListener("click", () => {
+  if (!currentMol) return;
+  if (location.protocol === "file:") {
+    setStatus("Die 3D-Ansicht braucht http(s) – bitte start-lokal.bat doppelklicken (startet einen lokalen Server) oder die Version auf dem Webserver nutzen.", "err");
+    return;
+  }
+  const url = "3d.html#" + btoa(molToMolfile(currentMol));
+  // benanntes Popup: erneute Klicks nutzen dasselbe Fenster
+  const win = window.open(url, "chedit3d", "popup=yes,width=680,height=600");
+  if (win) { win.focus(); return; }
+  // Popup blockiert (Popup-Blocker oder sandbox-iframe): Overlay im Tool öffnen
+  open3dOverlay(url);
+});
+
+function open3dOverlay(url) {
+  let ov = $("viewerOverlay");
+  if (!ov) {
+    ov = document.createElement("div");
+    ov.id = "viewerOverlay";
+    ov.innerHTML = '<div class="viewer-box">' +
+      '<div class="viewer-bar"><button type="button" id="viewerClose" aria-label="3D-Ansicht schließen">✕ Schließen</button></div>' +
+      '<iframe id="viewerFrame" title="3D-Modell (JSmol)"></iframe></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e => { if (e.target === ov) close3dOverlay(); });
+    $("viewerClose").addEventListener("click", close3dOverlay);
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && !ov.hidden) close3dOverlay(); });
+  }
+  ov.hidden = false;
+  $("viewerFrame").src = url;
+}
+function close3dOverlay() {
+  const ov = $("viewerOverlay");
+  if (ov) { ov.hidden = true; $("viewerFrame").src = "about:blank"; }
+}
+
+/* ---------- Arbeitsblatt-Liste (lokal im Browser gespeichert) ---------- */
+const SHEET_KEY = "cfe-arbeitsblatt";
+let sheet = [];
+try { sheet = JSON.parse(localStorage.getItem(SHEET_KEY) || "[]"); } catch (e) { sheet = []; }
+try { sheetTitleIn.value = localStorage.getItem(SHEET_KEY + "-titel") || ""; } catch (e) {}
+
+function saveSheet() {
+  try {
+    localStorage.setItem(SHEET_KEY, JSON.stringify(sheet));
+    localStorage.setItem(SHEET_KEY + "-titel", sheetTitleIn.value);
+  } catch (e) {}
+}
+
+function renderSheetList() {
+  sheetSection.hidden = sheet.length === 0;
+  sheetCount.textContent = sheet.length;
+  sheetList.innerHTML = "";
+  sheet.forEach((it, idx) => {
+    const li = document.createElement("li");
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = it.type === "struct" ? "Struktur" : "Gleichung";
+    const lbl = document.createElement("span");
+    lbl.className = "sheet-item-label";
+    lbl.textContent = it.input;
+    lbl.title = it.input;
+    li.appendChild(badge);
+    li.appendChild(lbl);
+    const mk = (txt, aria, fn, dis) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = txt;
+      b.setAttribute("aria-label", `Eintrag ${idx + 1} ${aria}`);
+      b.disabled = !!dis;
+      b.addEventListener("click", fn);
+      li.appendChild(b);
+    };
+    mk("↑", "nach oben schieben", () => { [sheet[idx - 1], sheet[idx]] = [sheet[idx], sheet[idx - 1]]; saveSheet(); renderSheetList(); }, idx === 0);
+    mk("↓", "nach unten schieben", () => { [sheet[idx + 1], sheet[idx]] = [sheet[idx], sheet[idx + 1]]; saveSheet(); renderSheetList(); }, idx === sheet.length - 1);
+    mk("✕", "entfernen", () => { sheet.splice(idx, 1); saveSheet(); renderSheetList(); });
+    sheetList.appendChild(li);
+  });
+}
+
+btnAdd.addEventListener("click", () => {
+  if (!currentDraw) return;
+  const input = eqInput.value.trim();
+  if (mode === "struct") {
+    sheet.push({ type: "struct", input, stil: structStyle, form: structGeo, ep: epCb.checked });
+  } else {
+    sheet.push({ type: "eq", input, mode });
+  }
+  saveSheet();
+  renderSheetList();
+  setStatus(`✔ Zur Arbeitsblatt-Liste hinzugefügt (${sheet.length} ${sheet.length === 1 ? "Eintrag" : "Einträge"}).`, "ok");
+});
+
+$("clearSheet").addEventListener("click", () => {
+  sheet = [];
+  saveSheet();
+  renderSheetList();
+});
+sheetTitleIn.addEventListener("input", saveSheet);
+gapCb.addEventListener("change", () => { solCb.disabled = !gapCb.checked; });
+
+// Einzelnen Listeneintrag für den Druck rendern (scale 3 = druckscharf)
+function renderItemCanvas(item, gap) {
+  const cv = document.createElement("canvas");
+  const base = { fontSize: parseInt(sizeRange.value, 10), fontFamily: fontSel.value, scale: 3, background: "#ffffff" };
+  if (item.type === "struct") {
+    const mol = parseStructOrName(item.input);
+    renderMolecule(cv, mol, item.stil, {
+      ...base,
+      geometry: item.stil === "full" ? item.form : "zigzag",
+      lonePairs: item.stil === "full" && item.ep
+    });
+  } else {
+    const eq = parseEquation(item.input);
+    const coefs = item.mode === "check" ? null : balance([...eq.left, ...eq.right], eq.left.length);
+    renderSegments(cv, buildSegments(eq, coefs, !!gap), base);
+  }
+  return cv;
+}
+
+function buildPrintHTML() {
+  const title = escapeHtml(sheetTitleIn.value.trim() || "Arbeitsblatt");
+  const gap = gapCb.checked;
+  const withSol = solCb.checked && gap;
+  const section = (heading, useGap) => {
+    let h = `<h1>${heading}</h1><ol>`;
+    sheet.forEach(it => {
+      try {
+        const cv = renderItemCanvas(it, useGap && it.type === "eq");
+        h += `<li><img src="${cv.toDataURL("image/png")}" style="width:${Math.round(cv.width / 3)}px;max-width:100%" alt="${escapeHtml(it.input)}"></li>`;
+      } catch (e) {
+        h += `<li>${escapeHtml(it.input)} – <em>Fehler: ${escapeHtml(e.message)}</em></li>`;
+      }
+    });
+    return h + "</ol>";
+  };
+  let html = `<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>${title}</title><style>
+    body { font-family: Arial, sans-serif; margin: 18mm; color: #000; }
+    h1 { font-size: 16pt; border-bottom: 2px solid #04316a; padding-bottom: 4px; }
+    ol { padding-left: 1.6em; } li { margin: 20px 0; }
+    .kopf { color: #444; font-size: 10pt; display: flex; justify-content: space-between; margin-bottom: 10px; }
+    .solution { page-break-before: always; }
+  </style></head><body>
+  <div class="kopf"><span>Name: ______________________</span><span>Klasse: ______</span><span>Datum: ____________</span></div>`;
+  html += section(title, gap);
+  if (withSol) html += `<div class="solution">${section("Lösungen – " + title, false)}</div>`;
+  return html + "</body></html>";
+}
+
+$("printSheet").addEventListener("click", () => {
+  if (!sheet.length) return;
+  const win = window.open("", "_blank");
+  if (!win) {
+    setStatus("Popup wurde blockiert – bitte Popups für diese Seite erlauben.", "err");
+    return;
+  }
+  win.document.write(buildPrintHTML());
+  win.document.close();
+  win.focus();
+  win.onload = () => win.print();
+});
+
+renderSheetList();
+solCb.disabled = !gapCb.checked;
+
+/* ---------- Start: URL-Parameter auswerten (?eq=…&mode=…&stil=…&form=…) ---------- */
+const startParams = new URLSearchParams(location.search);
+if (startParams.get("eq")) eqInput.value = startParams.get("eq");
+if (startParams.get("stil") === "voll") setStructStyle("full");
+if (startParams.get("form") === "linear") setStructGeo("linear");
+if (startParams.get("ep") === "1") epCb.checked = true;
+const startMode = startParams.get("mode");
+setMode(startMode === "check" ? "check" : startMode === "struct" ? "struct" : "auto");
+</script>
+</body>
+</html>

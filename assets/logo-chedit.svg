@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 212 72" role="img" aria-label="ChEdit">
+  <!-- ChEdit-Logo, Variante 1e „Editor-Caret“ (statische Fassung) -->
+  <rect x="1.5" y="1.5" width="209" height="69" rx="12" fill="#f4f6fa" stroke="#d9e0ea" stroke-width="3"/>
+  <text x="18" y="49" font-family="'Courier New', Courier, monospace" font-size="38" fill="#04316a"><tspan font-weight="700">Ch</tspan><tspan font-weight="400">Edit</tspan></text>
+  <rect x="182" y="18" width="5" height="36" rx="2" fill="#fdb735"/>
+</svg>
