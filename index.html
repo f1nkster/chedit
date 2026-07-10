@@ -860,23 +860,63 @@ function finalizeMol(mol) {
   mol.warnings = [...new Set(warnings)];
 }
 
-// Summenformel als HTML (C zuerst, dann H, Rest alphabetisch)
-function molFormula(mol) {
+// Zusammenhängende Komponenten (Fragmente) mit ihrer Gesamtladung
+function molComponents(mol) {
+  const n = mol.atoms.length;
+  const adj = Array.from({ length: n }, () => []);
+  mol.bonds.forEach(b => { adj[b.a].push(b.b); adj[b.b].push(b.a); });
+  const seen = new Array(n).fill(false), comps = [];
+  for (let s = 0; s < n; s++) if (!seen[s]) {
+    const idxs = [], st = [s]; seen[s] = true;
+    while (st.length) { const u = st.pop(); idxs.push(u); for (const t of adj[u]) if (!seen[t]) { seen[t] = true; st.push(t); } }
+    comps.push({ atoms: idxs, charge: idxs.reduce((c, i) => c + (mol.atoms[i].charge || 0), 0) });
+  }
+  return comps;
+}
+
+// Summenformel einer Atommenge als HTML (Hill: C, H, Rest alphabetisch)
+function fragmentFormula(mol, idxs, fragCharge) {
   const counts = {};
   let hs = 0;
-  mol.atoms.forEach(a => { counts[a.el] = (counts[a.el] || 0) + 1; hs += a.h; });
+  idxs.forEach(i => { const a = mol.atoms[i]; counts[a.el] = (counts[a.el] || 0) + 1; hs += a.h; });
   if (hs) counts.H = (counts.H || 0) + hs;
   const rank = e => e === "C" ? 0 : e === "H" ? 1 : 2;
   let order = Object.keys(counts).sort((x, y) => rank(x) - rank(y) || x.localeCompare(y));
-  // Konvention statt Hill-System: NH3/PH3 mit Element zuerst
   const nonH = order.filter(e => e !== "H");
-  if (!counts.C && nonH.length === 1 && (nonH[0] === "N" || nonH[0] === "P")) {
-    order = counts.H ? [nonH[0], "H"] : [nonH[0]];
-  }
-  let html = order
-    .map(el => el + (counts[el] > 1 ? "<sub>" + counts[el] + "</sub>" : ""))
-    .join("");
+  // Element vor H schreiben: N/P (NH3, NH4+) und einfache Anionen (OH−, SH−); Wasser bleibt H2O
+  const single = nonH.length === 1 ? nonH[0] : null;
+  const elementFirst = single && (single === "N" || single === "P" ||
+    ((fragCharge || 0) < 0 && (single === "O" || single === "S")));
+  if (!counts.C && elementFirst) order = counts.H ? [single, "H"] : [single];
+  return order.map(el => el + (counts[el] > 1 ? "<sub>" + counts[el] + "</sub>" : "")).join("");
+}
+
+// Salz-/Ionenformel: Kationen zuerst, dann Anionen (NaCl, CaCl2 …)
+function saltFormula(mol, comps) {
+  const sorted = comps.slice().sort((a, b) => b.charge - a.charge);
+  const groups = [];
+  sorted.forEach(fr => {
+    const html = fragmentFormula(mol, fr.atoms, fr.charge);
+    const total = fr.atoms.length + fr.atoms.reduce((s2, i) => s2 + (mol.atoms[i].h || 0), 0);
+    const g = groups.find(x => x.key === html);
+    if (g) g.count++;
+    else groups.push({ key: html, html, poly: total > 1, count: 1 });
+  });
+  let out = groups.map(g => g.count === 1 ? g.html
+    : g.poly ? "(" + g.html + ")<sub>" + g.count + "</sub>"
+    : g.html + "<sub>" + g.count + "</sub>").join("");
   const net = mol.atoms.reduce((s2, a) => s2 + (a.charge || 0), 0);
+  if (net) out += "<sup>" + chargeStr(net) + "</sup>";
+  return out;
+}
+
+// Summenformel als HTML
+function molFormula(mol) {
+  const comps = molComponents(mol);
+  // getrennte, geladene Fragmente (Salze) -> Kation vor Anion
+  if (comps.length > 1 && mol.atoms.some(a => a.charge)) return saltFormula(mol, comps);
+  const net = mol.atoms.reduce((s2, a) => s2 + (a.charge || 0), 0);
+  let html = fragmentFormula(mol, mol.atoms.map((_, i) => i), net);
   if (net) html += "<sup>" + chargeStr(net) + "</sup>";
   return html;
 }
