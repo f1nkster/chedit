@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "Wenn Sie ChEdit verwenden, zitieren Sie es bitte wie folgt."
+title: "ChEdit – Chemie-Formeleditor"
+abstract: >-
+  Web-Tool zum Erstellen und Prüfen chemischer Reaktionsgleichungen und
+  einfacher organischer Strukturformeln (2D-Skelett-/Valenzstrichformeln
+  sowie 3D-Modelle via JSmol) für den Chemieunterricht. Mit PNG-/SVG-Export
+  und Arbeitsblatt-Funktion.
+type: software
+authors:
+  - name: "Lehrstuhl für Didaktik der Chemie, FAU Erlangen-Nürnberg"
+    website: "https://www.chemiedidaktik.phil.fau.de/"
+version: "1.0.0"
+date-released: "2026-07-10"
+license: MIT
+repository-code: "https://github.com/f1nkster/chedit"
+url: "https://www.chemiedidaktik.phil.fau.de/chedit/"
+keywords:
+  - Chemiedidaktik
+  - chemistry education
+  - Reaktionsgleichungen
+  - Strukturformeln
+  - JSmol
