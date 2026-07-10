@@ -97,11 +97,19 @@ als 3 Fe-Atome mit Ladung 1+ gelesen (das Tool zeigt dann einen Tipp an).
 | `CH3-CH2-OH` oder `CCO` | Ketten als Halbstrukturformel oder SMILES |
 | `CH3-CH(CH3)-CH3`, `C(CH3)4` | Zweige in Klammern, optional mit Anzahl |
 | `CH2=CH2`, `HC#CH` | Doppel-/Dreifachbindung mit `=` / `#` |
-| `C1CCCCC1`, `c1ccccc1` | Ringe über Ringziffern, Benzol klein geschrieben |
+| `C1CCCCC1`, `c1ccccc1` | Ringe über Ringziffern (auch `%nn`), Benzol klein geschrieben |
+| `c1ccncc1`, `c1ccoc1`, `c1cc[nH]c1` | Heteroaromaten: Pyridin, Furan, Pyrrol, Thiophen |
+| `[NH4+]`, `[O-]`, `CC(=O)[O-]` | Ionen/Ladungen und explizite H in eckigen Klammern |
+| `[Na+].[Cl-]` | getrennte Teilchen mit `.` |
 | `COOH`, `CHO`, `CO`, `NH2`, `OH`, `CN` | erkannte funktionelle Gruppen |
 
-**Grenzen:** ein Ring pro Molekül (keine kondensierten Ringsysteme), keine Stereochemie,
-unterstützte Elemente: C, H, N, O, S, P und Halogene.
+Die Summenformel zeigt bei Ionen die **Netto-Ladung** an; in der Skelettformel werden
+Ladungen hochgestellt am Atom dargestellt.
+
+**Grenzen der 2D-Zeichnung:** ein Ring pro Molekül und keine getrennten Fragmente – solche
+Strukturen (z. B. Naphthalin, Salze) werden **nicht** als 2D-Skelettformel gezeichnet, sind
+aber als **Summenformel** und **3D-Modell** verfügbar. Keine Stereochemie. Unterstützte
+Elemente in der 2D-Darstellung: C, H, N, O, S, P und Halogene (weitere via `[…]` für Formel/3D).
 
 ## Nutzung
 

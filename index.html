@@ -285,7 +285,10 @@
     (<code>CCO</code>) oder Name (<code>Ethanol</code>, <code>2-Methylbutan</code>, <code>But-2-en</code>,
     <code>Essigsäure</code>) · Zweige in Klammern, ggf. mit Anzahl: <code>C(CH3)4</code> ·
     Mehrfachbindungen mit <code>=</code> und <code>#</code> · Ringe mit Ziffern (<code>C1CCCCC1</code>),
-    Benzol als <code>c1ccccc1</code>.
+    Benzol als <code>c1ccccc1</code>, Heteroaromaten wie <code>c1ccncc1</code> (Pyridin), <code>c1ccoc1</code> (Furan) ·
+    Ionen/Ladungen in eckigen Klammern: <code>[NH4+]</code>, <code>[O-]</code>, <code>CC(=O)[O-]</code> (Acetat) ·
+    getrennte Teilchen mit <code>.</code> (<code>[Na+].[Cl-]</code>) · mehrere/verwachsene Ringe und Fragmente
+    werden als 3D-Modell statt 2D dargestellt.
     <p class="made">
       Open Source (MIT) ·
       <a href="https://github.com/f1nkster/chedit" target="_blank" rel="noopener">Quellcode auf GitHub</a> ·
@@ -657,10 +660,37 @@ const GROUP_TOKENS = [
 ];
 
 function newMol() { return { atoms: [], bonds: [], aromaticFlags: [] }; }
-function addMolAtom(mol, el) { mol.atoms.push({ el, declaredH: undefined }); return mol.atoms.length - 1; }
+function addMolAtom(mol, el, opts) {
+  mol.atoms.push(Object.assign({ el, declaredH: undefined, charge: 0 }, opts || {}));
+  return mol.atoms.length - 1;
+}
+function adjCount(mol, i) { return mol.bonds.reduce((c, b) => c + (b.a === i || b.b === i ? 1 : 0), 0); }
+// Ladung als String, z. B. +1 -> "+", -2 -> "2−"
+function chargeStr(c) { const m = Math.abs(c); return (m > 1 ? m : "") + (c > 0 ? "+" : "−"); }
 function addMolBond(mol, a, b, order) {
   if (a === b) throw new Error("Ein Atom kann nicht an sich selbst gebunden sein");
   mol.bonds.push({ a, b, order });
+}
+
+// SMILES-Klammer-Atom, z. B. [O-], [NH4+], [nH], [Na+], [Fe+3], [13CH3], [C@H]
+function parseBracketAtom(body) {
+  let j = 0;
+  while (j < body.length && /\d/.test(body[j])) j++;   // Isotop überspringen
+  let el, arom = false;
+  if (j < body.length && /[a-z]/.test(body[j]) && "cnops".includes(body[j])) { arom = true; el = body[j].toUpperCase(); j++; }
+  else if (j < body.length && /[A-Z]/.test(body[j])) { el = body[j++]; if (j < body.length && /[a-z]/.test(body[j])) el += body[j++]; }
+  else throw new Error(`Klammer-Atom „[${body}]“ nicht erkannt`);
+  while (body[j] === "@") j++;                           // Stereochemie ignorieren
+  let h = 0;
+  if (body[j] === "H") { j++; let num = ""; while (j < body.length && /\d/.test(body[j])) num += body[j++]; h = num ? parseInt(num, 10) : 1; }
+  let charge = 0;
+  while (body[j] === "+" || body[j] === "-") {
+    const sign = body[j] === "+" ? 1 : -1; j++;
+    let num = ""; while (j < body.length && /\d/.test(body[j])) num += body[j++];
+    charge += sign * (num ? parseInt(num, 10) : 1);
+  }
+  if (body[j] === ":") { j++; while (j < body.length && /\d/.test(body[j])) j++; }  // Atom-Map ignorieren
+  return { el, h, charge, arom };
 }
 
 // Ein Parser für beide Schreibweisen: Halbstrukturformel und SMILES-Teilmenge
@@ -688,6 +718,7 @@ function parseStructure(input) {
     while (i < str.length) {
       const ch = str[i];
       if (BOND[ch] !== undefined) { pending = BOND[ch]; i++; continue; }
+      if (ch === ".") { last = null; pending = 1; i++; continue; } // getrennte Komponente
       if (ch === ")") throw new Error("Klammer „)“ ohne passendes „(“");
       if (ch === "(") {
         const close = matchParen(str, i);
@@ -705,12 +736,25 @@ function parseStructure(input) {
         }
         continue;
       }
-      if (/\d/.test(ch)) { // Ringschluss (SMILES-Ziffer direkt nach einem Atom)
+      if (ch === "[") { // Klammer-Atom (Ladung, explizite H, seltenere Elemente)
+        const close = str.indexOf("]", i);
+        if (close < 0) throw new Error("„[…“ nicht geschlossen");
+        const atom = parseBracketAtom(str.slice(i + 1, close));
+        i = close + 1;
+        const idx = addMolAtom(mol, atom.el, { bracket: true, charge: atom.charge, h: atom.h, explicitH: true });
+        mol.aromaticFlags[idx] = !!atom.arom;
+        if (last !== null) addMolBond(mol, last, idx, pending);
+        else if (first === null) first = idx;
+        last = idx; pending = 1; continue;
+      }
+      if (ch === "%" || /\d/.test(ch)) { // Ringschluss: einzelne Ziffer oder %nn
+        let label;
+        if (ch === "%") { label = str.substr(i + 1, 2); i += 3; }
+        else { label = ch; i++; }
         if (last === null) throw new Error("Ringziffer ohne Atom davor");
-        if (ringOpen[ch] !== undefined) { addMolBond(mol, ringOpen[ch], last, pending); delete ringOpen[ch]; }
-        else ringOpen[ch] = last;
-        pending = 1;
-        i++; continue;
+        if (ringOpen[label] !== undefined) { addMolBond(mol, ringOpen[label], last, pending); delete ringOpen[label]; }
+        else ringOpen[label] = last;
+        pending = 1; continue;
       }
       let tok = null;
       for (const t of GROUP_TOKENS) {
@@ -738,42 +782,74 @@ function parseStructure(input) {
   parseChain(s);
   if (Object.keys(ringOpen).length) throw new Error("Ring nicht geschlossen (zweite Ringziffer fehlt)");
   if (!mol.atoms.length) throw new Error("Kein Atom gefunden");
-  kekulize(mol);
+  handleAromatics(mol);
   return mol;
 }
 
-// Aromatische 6-Ringe (c1ccccc1) in alternierende Doppelbindungen umwandeln
-function kekulize(mol) {
+// Aromaten behandeln: einzelne 5-/6-Ringe (auch Heteroaromaten) als Kekulé zeichnen;
+// alles andere (kondensiert/mehrfach) bekommt nur perzipierte H – gezeichnet wird es
+// dann nicht (2D), aber Summenformel und 3D-Modell funktionieren.
+function handleAromatics(mol) {
   const arom = mol.aromaticFlags.map((f, i) => f ? i : -1).filter(i => i >= 0);
   if (!arom.length) return;
-  if (arom.length !== 6) throw new Error("Aromaten: nur einzelne Sechsringe (z. B. c1ccccc1) werden unterstützt");
   const aset = new Set(arom);
   const nbr = {};
-  let count = 0;
+  const aromBonds = [];
   mol.bonds.forEach(b => {
     if (aset.has(b.a) && aset.has(b.b)) {
       (nbr[b.a] = nbr[b.a] || []).push(b);
       (nbr[b.b] = nbr[b.b] || []).push(b);
-      count++;
+      aromBonds.push(b);
     }
   });
-  if (count !== 6 || arom.some(a => (nbr[a] || []).length !== 2))
-    throw new Error("Aromatischer Ring unvollständig – Ringziffern prüfen (c1ccccc1)");
-  let cur = arom[0], prevB = null;
-  for (let k = 0; k < 6; k++) {
+  const singleRing = aromBonds.length === arom.length && arom.every(a => (nbr[a] || []).length === 2);
+  if (singleRing && (arom.length === 5 || arom.length === 6)) {
+    kekulizeRing(mol, arom, nbr);
+    return;
+  }
+  // Fallback: H perzipieren (SMILES-Aromaten-Regel), aromatische Bindungen markieren
+  arom.forEach(i => {
+    const a = mol.atoms[i];
+    if (a.explicitH) { a.perceived = true; return; }
+    const ring = (nbr[i] || []).length;
+    const ext = mol.bonds.reduce((s2, b) => s2 + ((b.a === i || b.b === i) && !(aset.has(b.a) && aset.has(b.b)) ? b.order : 0), 0);
+    const val = VALENCE[a.el] || 0;
+    a.h = (a.el === "O" || a.el === "S") ? Math.max(0, val - ring - ext)
+                                         : Math.max(0, val - ring - 1 - ext); // -1 für π-Elektron
+    a.perceived = true;
+  });
+  aromBonds.forEach(b => { b.aromatic = true; });
+}
+
+// Einzelnen aromatischen Ring in Kekulé-Doppelbindungen umsetzen (5- und 6-Ringe)
+function kekulizeRing(mol, arom, nbr) {
+  const size = arom.length;
+  let start = arom[0];
+  if (size === 5) { // Fünfring: beim Lone-Pair-Geber beginnen (O, S oder N-H)
+    const donor = arom.find(i => { const a = mol.atoms[i]; return a.el === "O" || a.el === "S" || (a.el === "N" && a.explicitH); });
+    if (donor !== undefined) start = donor;
+  }
+  const bondsOrdered = [];
+  let cur = start, prevB = null;
+  for (let k = 0; k < size; k++) {
     const b = nbr[cur].find(x => x !== prevB);
-    b.order = (k % 2 === 0) ? 2 : 1;
+    bondsOrdered.push(b);
     cur = (b.a === cur) ? b.b : b.a;
     prevB = b;
   }
+  const pattern = size === 6 ? [2, 1, 2, 1, 2, 1] : [1, 2, 1, 2, 1];
+  bondsOrdered.forEach((b, k) => { b.order = pattern[k]; });
 }
 
 // Valenzen prüfen, implizite H-Zahlen bestimmen, geschriebene H-Zahlen vergleichen
 function finalizeMol(mol) {
   const warnings = [];
   mol.atoms.forEach((a, idx) => {
+    // Klammer-Atome (explizite H) und perzipierte Aromaten haben ihre H-Zahl schon
+    if (a.bracket || a.perceived) { if (a.h === undefined) a.h = 0; return; }
     const order = mol.bonds.reduce((s2, b) => s2 + ((b.a === idx || b.b === idx) ? b.order : 0), 0);
     const val = VALENCE[a.el];
+    if (val === undefined) { a.h = 0; return; } // unbekanntes Element: keine impliziten H
     if (order > val) throw new Error(`${a.el} hätte hier ${order} Bindungen – möglich sind höchstens ${val}`);
     a.h = val - order;
     if (a.declaredH !== undefined && a.declaredH !== a.h) {
@@ -797,9 +873,12 @@ function molFormula(mol) {
   if (!counts.C && nonH.length === 1 && (nonH[0] === "N" || nonH[0] === "P")) {
     order = counts.H ? [nonH[0], "H"] : [nonH[0]];
   }
-  return order
+  let html = order
     .map(el => el + (counts[el] > 1 ? "<sub>" + counts[el] + "</sub>" : ""))
     .join("");
+  const net = mol.atoms.reduce((s2, a) => s2 + (a.charge || 0), 0);
+  if (net) html += "<sup>" + chargeStr(net) + "</sup>";
+  return html;
 }
 
 /* ---------- Namenseingabe: Trivialnamen + einfache deutsche Nomenklatur ---------- */
@@ -992,7 +1071,11 @@ function layoutMol(mol, L, geometry) {
   const n = mol.atoms.length;
   const adj = Array.from({ length: n }, () => []);
   mol.bonds.forEach((b, bi) => { adj[b.a].push({ to: b.b, bi }); adj[b.b].push({ to: b.a, bi }); });
-  if (mol.bonds.length > n) throw new Error("Mehrere oder kondensierte Ringe werden noch nicht unterstützt");
+  // Getrennte Fragmente oder mehr als ein Ring lassen sich nicht sauber als eine
+  // 2D-Skelettformel zeichnen -> als "no2d" markieren (Aufrufer zeigt Formel + 3D).
+  { const seenC = new Array(n).fill(false); let comps = 0;
+    for (let s = 0; s < n; s++) if (!seenC[s]) { comps++; const st = [s]; seenC[s] = true; while (st.length) { const u = st.pop(); for (const { to } of adj[u]) if (!seenC[to]) { seenC[to] = true; st.push(to); } } }
+    if (comps > 1 || mol.bonds.length > n) { const e = new Error("no2d"); e.no2d = true; throw e; } }
   const pos = new Array(n).fill(null);
   const D30 = Math.PI / 6, D90 = Math.PI / 2;
   const linear = geometry === "linear";
@@ -1074,6 +1157,40 @@ function layoutMol(mol, L, geometry) {
   mol.pos = pos;
 }
 
+// Ist das Molekül als eine 2D-Skelettformel zeichenbar? (ein Fragment, höchstens ein Ring)
+function canLayout2D(mol) {
+  const n = mol.atoms.length;
+  if (!n) return false;
+  const adj = Array.from({ length: n }, () => []);
+  mol.bonds.forEach(b => { adj[b.a].push(b.b); adj[b.b].push(b.a); });
+  const seen = new Array(n).fill(false); let comps = 0;
+  for (let s = 0; s < n; s++) if (!seen[s]) { comps++; const st = [s]; seen[s] = true; while (st.length) { const u = st.pop(); for (const t of adj[u]) if (!seen[t]) { seen[t] = true; st.push(t); } } }
+  return comps === 1 && mol.bonds.length <= n;
+}
+
+// Grobe 2D-Startkoordinaten für beliebige Graphen (nur als Startpunkt fürs 3D-Minimieren)
+function crudeLayout(mol, L) {
+  const n = mol.atoms.length;
+  const pos = new Array(n).fill(null);
+  const adj = Array.from({ length: n }, () => []);
+  mol.bonds.forEach(b => { adj[b.a].push(b.b); adj[b.b].push(b.a); });
+  let gx = 0;
+  for (let s = 0; s < n; s++) {
+    if (pos[s]) continue;
+    const q = [s]; pos[s] = [gx, 0]; let ang = 0;
+    while (q.length) {
+      const u = q.shift(); let k = 0;
+      for (const v of adj[u]) if (!pos[v]) {
+        const a = ang + k * Math.PI / 3;
+        pos[v] = [pos[u][0] + L * Math.cos(a), pos[u][1] + L * Math.sin(a)]; k++; q.push(v);
+      }
+      ang += Math.PI / 6;
+    }
+    gx += 6 * L;
+  }
+  return pos;
+}
+
 /* ---------- Molekül-Renderer (Skelettformel / ausgeschrieben) ---------- */
 function renderMolecule(canvas, mol, style, opts) {
   const fs = Math.max(10, Math.round(opts.fontSize * 0.72));
@@ -1106,8 +1223,15 @@ function renderMolecule(canvas, mol, style, opts) {
       return { t: a.el + hTxt, anchor: "first" };
     return { t: a.el + hTxt, anchor: "center" };
   }
-  const labels = mol.atoms.map((a, i) =>
-    style === "full" ? { t: a.el, anchor: "center" } : skeletonLabel(a, i));
+  const labels = mol.atoms.map((a, i) => {
+    let lb = style === "full" ? { t: a.el, anchor: "center" } : skeletonLabel(a, i);
+    if (a.charge) { // geladene Atome bekommen immer ein Label mit hochgestellter Ladung
+      if (!lb) lb = { t: a.el + (a.h ? "H" + (a.h > 1 ? a.h : "") : ""), anchor: "center" };
+      else lb = Object.assign({}, lb);
+      lb.sup = chargeStr(a.charge);
+    }
+    return lb;
+  });
 
   // explizite H-Atome (nur "ausgeschrieben"): freie Richtungen suchen,
   // Kollisionen mit anderen Atomen und bereits gesetzten H vermeiden
@@ -1215,6 +1339,7 @@ function renderMolecule(canvas, mol, style, opts) {
       draws.push({ lb, x: pos[i][0], y: pos[i][1], shift });
       consider(pos[i][0] - shift, pos[i][1], fs * 0.75);
       consider(pos[i][0] - shift + total, pos[i][1], fs * 0.75);
+      if (lb.sup) { ctx.font = fontS; const sw = ctx.measureText(lb.sup).width; consider(pos[i][0] - shift + total + sw, pos[i][1] - fs * 0.5, fs * 0.4); }
     } else {
       consider(pos[i][0], pos[i][1], fs * 0.2);
     }
@@ -1293,7 +1418,7 @@ function renderMolecule(canvas, mol, style, opts) {
   });
 
   // Atom-Labels
-  function drawLabel(text, x, y, shift) {
+  function drawLabel(text, x, y, shift, sup) {
     let cx = x - shift;
     for (const ch of text) {
       const sub = /\d/.test(ch);
@@ -1301,8 +1426,12 @@ function renderMolecule(canvas, mol, style, opts) {
       ctx.fillText(ch, cx, y + (sub ? fs * 0.55 : fs * 0.35));
       cx += ctx.measureText(ch).width;
     }
+    if (sup) { // hochgestellte Ladung
+      ctx.font = fontS;
+      for (const ch of sup) { ctx.fillText(ch, cx, y - fs * 0.15); cx += ctx.measureText(ch).width; }
+    }
   }
-  draws.forEach(d => drawLabel(d.lb.t, d.x, d.y, d.shift));
+  draws.forEach(d => drawLabel(d.lb.t, d.x, d.y, d.shift, d.lb.sup));
   ctx.font = fontN;
   hNodes.forEach(hn => drawLabel("H", hn.x, hn.y, ctx.measureText("H").width / 2));
   return { w, h };
@@ -1414,6 +1543,10 @@ const EXAMPLES = {
     ["CH3-CH(OH)-COOH", "Milchsäure – CH3-CH(OH)-COOH"],
     ["C1CCCCC1", "Cyclohexan – C1CCCCC1"],
     ["c1ccccc1", "Benzol – c1ccccc1"],
+    ["c1ccncc1", "Pyridin – c1ccncc1"],
+    ["c1ccoc1", "Furan – c1ccoc1"],
+    ["CC(=O)[O-]", "Acetat-Ion – CC(=O)[O-]"],
+    ["[NH4+]", "Ammonium-Ion – [NH4+]"],
     ["2-Methylbutan", "Name: 2-Methylbutan"],
     ["Propan-2-ol", "Name: Propan-2-ol"],
     ["But-2-en", "Name: But-2-en"],
@@ -1552,9 +1685,18 @@ function update() {
       const warnHtml = mol.warnings.length
         ? `<br><span class="msg-warn">⚠ ${mol.warnings.map(escapeHtml).join(" · ")}</span>`
         : "";
-      feedback.innerHTML = `<span class="msg-muted">Summenformel:</span> <b>${molFormula(mol)}</b>` + warnHtml;
-      const plainFormula = molFormula(mol).replace(/<\/?sub>/g, "");
-      showPreview(molDraw(mol), `Strukturformel zu ${raw.trim()}, Summenformel ${plainFormula}`);
+      const formulaHtml = molFormula(mol);
+      const plainFormula = formulaHtml.replace(/<\/?sub>/g, "").replace(/<sup>/g, "^").replace(/<\/sup>/g, "");
+      if (canLayout2D(mol)) {
+        feedback.innerHTML = `<span class="msg-muted">Summenformel:</span> <b>${formulaHtml}</b>` + warnHtml;
+        showPreview(molDraw(mol), `Strukturformel zu ${raw.trim()}, Summenformel ${plainFormula}`);
+      } else {
+        // Fragmente/Mehrfachringe: nicht als 2D-Skelettformel, aber Formel + 3D
+        feedback.innerHTML = `<span class="msg-muted">Summenformel:</span> <b>${formulaHtml}</b>` +
+          `<br><span class="msg-muted">Für mehrere Ringe/Fragmente ist keine 2D-Zeichnung möglich – als 3D-Modell verfügbar.</span>` + warnHtml;
+        clearPreview("Diese Struktur wird nur als 3D-Modell dargestellt – Button „🧊 3D-Modell“.");
+        view3dBtn.disabled = false; // 3D funktioniert (grobes Startlayout + JSmol)
+      }
     } catch (err) {
       feedback.innerHTML = `<span class="msg-err">${escapeHtml(err.message)}</span>`;
       clearPreview("Struktur konnte nicht erzeugt werden.");
@@ -1690,15 +1832,18 @@ btnLink.addEventListener("click", async () => {
    sonst auf https://intern.chemiedidaktik.fau.de/jsmol (dort per ?jsmol=… übersteuerbar). */
 const view3dBtn = $("view3d");
 
-// MOL-Datei (V2000) mit expliziten H-Atomen; JSmol optimiert die Geometrie danach selbst
+// MOL-Datei (V2000) mit expliziten H-Atomen; JSmol optimiert die Geometrie danach selbst.
+// Nicht 2D-zeichenbare Moleküle (Fragmente/Mehrfachringe) bekommen grobe Startkoordinaten.
 function molToMolfile(mol) {
-  layoutMol(mol, 40, "zigzag");
-  const pos = mol.pos, sc = 1.5 / 40; // Bindungslänge ≈ 1,5 Å
+  let pos;
+  try { layoutMol(mol, 40, "zigzag"); pos = mol.pos; }
+  catch (e) { pos = crudeLayout(mol, 40); }
+  const sc = 1.5 / 40; // Bindungslänge ≈ 1,5 Å
   const atoms = [], bonds = [];
   mol.atoms.forEach((a, i) => {
     atoms.push({ el: a.el, x: pos[i][0] * sc, y: -pos[i][1] * sc, z: ((i % 3) - 1) * 0.12 });
   });
-  mol.bonds.forEach(b => bonds.push([b.a + 1, b.b + 1, b.order]));
+  mol.bonds.forEach(b => bonds.push([b.a + 1, b.b + 1, b.aromatic ? 4 : b.order])); // 4 = aromatisch
   mol.atoms.forEach((a, i) => {
     for (let k = 0; k < a.h; k++) {
       const ang = k * 2.4 + i; // grobe Verteilung genügt vor dem Minimieren
@@ -1711,6 +1856,14 @@ function molToMolfile(mol) {
   out += String(atoms.length).padStart(3) + String(bonds.length).padStart(3) + "  0  0  0  0  0  0  0  0999 V2000\n";
   atoms.forEach(a => { out += f(a.x) + f(a.y) + f(a.z) + " " + a.el.padEnd(3) + " 0  0  0  0  0  0  0  0  0  0  0  0\n"; });
   bonds.forEach(b => { out += String(b[0]).padStart(3) + String(b[1]).padStart(3) + String(b[2]).padStart(3) + "  0\n"; });
+  // Ladungen als M CHG (max. 8 pro Zeile)
+  const charged = mol.atoms.map((a, i) => [i + 1, a.charge]).filter(x => x[1]);
+  for (let k = 0; k < charged.length; k += 8) {
+    const chunk = charged.slice(k, k + 8);
+    out += "M  CHG" + String(chunk.length).padStart(3);
+    chunk.forEach(([idx, c]) => { out += String(idx).padStart(4) + String(c).padStart(4); });
+    out += "\n";
+  }
   return out + "M  END\n";
 }
 
