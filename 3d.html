@@ -20,6 +20,13 @@
   }
   header button:hover:not(:disabled) { background: #fff; color: #04316a; }
   header button:disabled { opacity: .4; cursor: not-allowed; }
+  header select {
+    font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer;
+    background: #fff; color: #04316a; border: 1px solid rgba(255,255,255,.65); padding: 3px 6px;
+  }
+  header select:disabled { opacity: .4; cursor: not-allowed; }
+  header label { font-size: .8rem; display: inline-flex; align-items: center; gap: 4px; }
+  header label.dis { opacity: .4; }
   #viewer { flex: 1; position: relative; min-height: 0; }
   #msg { text-align: center; color: #5e5e5e; padding-top: 15vh; font-size: .95rem; line-height: 1.6; }
   #optimiere {
@@ -32,7 +39,16 @@
 <header>
   <strong>🧊 ChEdit – 3D-Modell</strong>
   <span class="note" id="headNote">Kraftfeld-optimierte Geometrie (Näherung) · Drehen: Maus · Zoom: Mausrad</span>
-  <button id="stKal" type="button" disabled title="Zwischen Kugel-Stab- und Kalottenmodell umschalten">Kalotten</button>
+  <label id="repLbl" class="dis">Darstellung
+    <select id="repSel" disabled>
+      <option value="bs">Kugel-Stab</option>
+      <option value="stick">Stäbchen</option>
+      <option value="cpk">Kalotten (CPK)</option>
+      <option value="wire">Drahtmodell</option>
+      <option value="esp">ESP-Oberfläche</option>
+    </select>
+  </label>
+  <label id="lblLbl" class="dis"><input type="checkbox" id="lblChk" disabled> Beschriftung</label>
   <button id="stMess" type="button" disabled title="Abstände messen: zwei Atome nacheinander anklicken">📏 Messen</button>
   <button id="dlPng" type="button" disabled title="Ansicht als PNG-Bild speichern">⬇ PNG</button>
   <button id="dlSvg" type="button" disabled title="Ansicht als SVG speichern (eingebettetes Pixelbild)">⬇ SVG</button>
@@ -90,12 +106,21 @@ document.getElementById("dlMol").addEventListener("click", () => {
   }
 });
 
-/* ---------- Darstellung & Messen (JSmol-Bedienung) ---------- */
-let kalotten = false, messen = false;
-document.getElementById("stKal").addEventListener("click", () => {
-  kalotten = !kalotten;
-  Jmol.script(applet, kalotten ? "wireframe off; spacefill 100%;" : "wireframe 0.15; spacefill 23%;");
-  document.getElementById("stKal").textContent = kalotten ? "Kugel–Stab" : "Kalotten";
+/* ---------- Darstellung, Beschriftung & Messen (JSmol-Bedienung) ---------- */
+let messen = false;
+const REPS = {
+  bs:    "isosurface delete; spacefill 23%; wireframe 0.15;",
+  stick: "isosurface delete; spacefill off; wireframe 0.24;",
+  cpk:   "isosurface delete; spacefill 100%; wireframe off;",
+  wire:  "isosurface delete; spacefill off; wireframe 0.06;",
+  // ESP: Gasteiger-Partialladungen berechnen und als Oberfläche einfärben (rot = negativ, blau = positiv)
+  esp:   "spacefill 23%; wireframe 0.15; calculate partialcharge; isosurface delete; isosurface resolution 0 molecular map mep translucent 0.3;"
+};
+document.getElementById("repSel").addEventListener("change", (e) => {
+  Jmol.script(applet, REPS[e.target.value] || REPS.bs);
+});
+document.getElementById("lblChk").addEventListener("change", (e) => {
+  Jmol.script(applet, e.target.checked ? "label %e; color labels black; font label 15; set labeloffset 0 0;" : "label off;");
 });
 document.getElementById("stMess").addEventListener("click", () => {
   messen = !messen;
@@ -112,7 +137,9 @@ function finishModel() {
   Jmol.script(applet, "center; zoom 0;");
   const ov = document.getElementById("optimiere");
   if (ov) ov.remove();
-  ["dlPng", "dlSvg", "dlMol", "stKal", "stMess"].forEach(id => { document.getElementById(id).disabled = false; });
+  ["dlPng", "dlSvg", "dlMol", "repSel", "lblChk", "stMess"].forEach(id => { document.getElementById(id).disabled = false; });
+  document.getElementById("repLbl").classList.remove("dis");
+  document.getElementById("lblLbl").classList.remove("dis");
 }
 // wird von JSmol während der Minimierung aufgerufen (Status u. a. "starting", "calculate", "done")
 window.cheditMinDone = function () {

@@ -648,6 +648,9 @@ function renderSegments(canvas, segs, opts) {
 
 /* ================== Strukturformeln (OC) ================== */
 const VALENCE = { C: 4, N: 3, O: 2, S: 2, P: 3, F: 1, Cl: 1, Br: 1, I: 1 };
+// Elemente mit mehreren üblichen Valenzen (jeweils kleinste ≥ Bindungssumme wählen).
+// Ermöglicht z. B. Sulfat/Phosphat, ohne H2S/Thioether/PH3 zu brechen.
+const VALENCE_MULTI = { S: [2, 4, 6], P: [3, 5] };
 
 // Gruppen-Tokens für Halbstrukturformeln (Reihenfolge = Priorität, längste zuerst).
 // attach = Index des Atoms, an dem die Kette weiterläuft. dH = geschriebene H-Anzahl.
@@ -881,9 +884,13 @@ function finalizeMol(mol) {
     // Klammer-Atome (explizite H) und perzipierte Aromaten haben ihre H-Zahl schon
     if (a.bracket || a.perceived) { if (a.h === undefined) a.h = 0; return; }
     const order = mol.bonds.reduce((s2, b) => s2 + ((b.a === idx || b.b === idx) ? b.order : 0), 0);
-    const val = VALENCE[a.el];
-    if (val === undefined) { a.h = 0; return; } // unbekanntes Element: keine impliziten H
-    if (order > val) throw new Error(`${a.el} hätte hier ${order} Bindungen – möglich sind höchstens ${val}`);
+    if (VALENCE[a.el] === undefined) { a.h = 0; return; } // unbekanntes Element: keine impliziten H
+    const multi = VALENCE_MULTI[a.el];
+    const val = multi ? multi.find(v => v >= order) : VALENCE[a.el];
+    if (val === undefined || order > val) {
+      const allowed = multi ? multi.join("/") : String(VALENCE[a.el]);
+      throw new Error(`${a.el} hätte hier ${order} Bindungen – möglich sind ${allowed}`);
+    }
     a.h = val - order;
     if (a.declaredH !== undefined && a.declaredH !== a.h) {
       const written = a.el + (a.declaredH ? "H" + (a.declaredH > 1 ? a.declaredH : "") : "");
@@ -916,11 +923,16 @@ function fragmentFormula(mol, idxs, fragCharge) {
   const rank = e => e === "C" ? 0 : e === "H" ? 1 : 2;
   let order = Object.keys(counts).sort((x, y) => rank(x) - rank(y) || x.localeCompare(y));
   const nonH = order.filter(e => e !== "H");
-  // Element vor H schreiben: N/P (NH3, NH4+) und einfache Anionen (OH−, SH−); Wasser bleibt H2O
+  const heavyNonO = nonH.filter(e => e !== "O");
   const single = nonH.length === 1 ? nonH[0] : null;
-  const elementFirst = single && (single === "N" || single === "P" ||
-    ((fragCharge || 0) < 0 && (single === "O" || single === "S")));
-  if (!counts.C && elementFirst) order = counts.H ? [single, "H"] : [single];
+  if (!counts.C && counts.O && heavyNonO.length === 1 && nonH.length >= 2) {
+    // Oxo-Spezies (Sulfat, Phosphat, Nitrat, H2SO4 …): H, Zentralatom, dann O
+    order = (counts.H ? ["H"] : []).concat([heavyNonO[0], "O"]);
+  } else if (!counts.C && single && (single === "N" || single === "P" ||
+    ((fragCharge || 0) < 0 && (single === "O" || single === "S")))) {
+    // Element vor H: N/P (NH3, NH4+) und einfache Anionen (OH−, SH−); Wasser bleibt H2O
+    order = counts.H ? [single, "H"] : [single];
+  }
   return order.map(el => el + (counts[el] > 1 ? "<sub>" + counts[el] + "</sub>" : "")).join("");
 }
 

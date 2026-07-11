@@ -64,8 +64,12 @@ ChEdit-Logos liegt unter `assets/logo-chedit.svg` (z. B. für Favicon oder Druck
   SN1/SN2-Abwägung** erklärt, welcher Mechanismus für die Kombination zu erwarten ist.
   Dazu 3D: schematische **JSmol-Animationen** (Rückseitenangriff an CH₃Br, Cl₂-Homolyse)
   und das **planare tert-Butyl-Kation**. Teilbare Links: `?mode=mech&m=sn2&sub=mebr&nu=oh&schritt=2`.
-- **3D-Viewer-Bedienung**: Umschalter **Kugel–Stab/Kalotten** und ein **Messmodus**
-  (Abstände durch Anklicken zweier Atome) direkt in der 3D-Ansicht.
+- **3D-Viewer-Bedienung**: Umschaltbare **Darstellungsformen** – Kugel-Stab, Stäbchen,
+  Kalotten (CPK), Drahtmodell und **ESP-Oberfläche** (elektrostatisches Potential:
+  rot = negativ/elektronenreich, blau = positiv; aus Gasteiger-Partialladungen) –,
+  optionale **Atom-Beschriftung** und ein **Messmodus** (Abstände durch Anklicken zweier
+  Atome). Hinweis: Keil-Strich-Formeln sind eine **2D**-Stereo-Konvention; die räumliche
+  Anordnung zeigt hier direkt das 3D-Modell.
 - **3D-Modelle (JSmol)**: Im Strukturmodus öffnet „🧊 3D-Modell“ die mitgelieferte
   Viewer-Seite `3d.html` in einem **Popup-Fenster** (MOL-Datei wird per URL übergeben;
   erneute Klicks nutzen dasselbe Fenster). Die Geometrie wird von JSmol per Kraftfeld
