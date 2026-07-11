@@ -2182,8 +2182,8 @@ $("mechPrev").addEventListener("click", () => { mechStep--; renderMech(); });
 $("mechNext").addEventListener("click", () => { mechStep++; renderMech(); });
 $("mechAnim3d").addEventListener("click", () => {
   const m = mechTypeSel.value, s = mechSubSel.value;
-  if (m === "sn2" && s === "mebr") openViewer("3d.html?typ=xyz&anim=1#" + btoa(sn2AnimXyz(mechNuSel.value)));
-  else if (m === "sn1" && s === "tert") openViewer("3d.html?typ=xyz#" + btoa(carbeniumTertXyz()));
+  if (m === "sn2" && s === "mebr") openViewer(sn2AnimXyz(mechNuSel.value), "typ=xyz&anim=1");
+  else if (m === "sn1" && s === "tert") openViewer(carbeniumTertXyz(), "typ=xyz");
 });
 
 examplesSel.addEventListener("change", e => {
@@ -2453,13 +2453,20 @@ function molToMolfile(mol) {
   return out + "M  END\n";
 }
 
-// Öffnet die mitgelieferte Viewer-Seite 3d.html in einem neuen Tab.
-// Viewer-Seite öffnen: bevorzugt als Popup, sonst als Overlay im Tool
-function openViewer(url) {
+// Viewer-Seite 3d.html öffnen (Popup, sonst Overlay). Der Payload (MOL bzw. XYZ)
+// wird über localStorage übergeben – zuverlässiger als ein sehr langer URL-Hash, den
+// window.open bei großen Datenmengen (z. B. Mechanismus-Animation) abschneiden kann.
+const VIEWER_KEY = "cfe-3d-payload";
+function openViewer(payload, query) {
   if (location.protocol === "file:") {
     setStatus("Die 3D-Ansicht braucht http(s) – bitte start-lokal.bat doppelklicken (startet einen lokalen Server) oder die Version auf dem Webserver nutzen.", "err");
     return;
   }
+  let url, stored = false;
+  try { localStorage.setItem(VIEWER_KEY, payload); stored = true; } catch (e) { /* z. B. localStorage aus */ }
+  const q = (query ? query + "&" : "") + "t=" + Date.now(); // Cache-Buster erzwingt Neuladen im wiederverwendeten Fenster
+  if (stored) url = "3d.html?" + q + "&src=ls";
+  else url = "3d.html?" + q + "#" + btoa(payload); // Notfall-Fallback über den Hash
   // benanntes Popup: erneute Klicks nutzen dasselbe Fenster
   const win = window.open(url, "chedit3d", "popup=yes,width=680,height=600");
   if (win) { win.focus(); return; }
@@ -2469,7 +2476,7 @@ function openViewer(url) {
 
 view3dBtn.addEventListener("click", () => {
   if (!currentMol) return;
-  openViewer("3d.html#" + btoa(molToMolfile(currentMol)));
+  openViewer(molToMolfile(currentMol));
 });
 
 function open3dOverlay(url) {

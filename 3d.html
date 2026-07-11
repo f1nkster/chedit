@@ -123,8 +123,13 @@ window.cheditMinDone = function () {
 // Payload im Hash: MOL-Datei (Standard) oder XYZ-Frames (typ=xyz, optional anim=1)
 const isXyz = params.get("typ") === "xyz";
 const isAnim = params.get("anim") === "1";
+// Payload aus localStorage (src=ls, roher Text) oder – als Fallback – aus dem URL-Hash (base64)
 let molfile = "";
-try { molfile = atob(location.hash.slice(1)); } catch (e) {}
+if (params.get("src") === "ls") {
+  try { molfile = localStorage.getItem("cfe-3d-payload") || ""; } catch (e) {}
+} else {
+  try { molfile = atob(location.hash.slice(1)); } catch (e) {}
+}
 const payloadOk = isXyz ? /^\s*\d+/.test(molfile) : molfile.indexOf("V2000") >= 0;
 if (isXyz) {
   document.getElementById("headNote").textContent = isAnim
