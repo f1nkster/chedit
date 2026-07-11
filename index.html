@@ -125,6 +125,22 @@
   .status.ok { color: var(--ok); }
   .status.err { color: var(--err); }
   .opt-label { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--muted); }
+  #mechOptions select {
+    font: inherit; font-size: .9rem; padding: 8px 10px; min-width: 0;
+    border: 1px solid var(--muted); background: var(--card); cursor: pointer;
+  }
+  #mechNav { align-items: center; }
+  #mechNav button {
+    font: inherit; font-size: .85rem; font-weight: 600; padding: 7px 14px; cursor: pointer;
+    border: 1px solid var(--fau-blau); background: var(--card); color: var(--fau-blau);
+  }
+  #mechNav button:hover:not(:disabled) { background: var(--fau-blau); color: #fff; }
+  #mechNav button:disabled { opacity: .4; cursor: not-allowed; }
+  .mech-box {
+    background: var(--fau-blau-hell); border-left: 4px solid var(--fau-blau);
+    padding: 8px 12px; margin-top: 10px; font-size: .9rem; color: var(--fau-dunkelblau);
+  }
+  .mech-box.warn { background: #fff5e0; border-left-color: var(--phil-orange); }
   #sheetSection {
     margin-top: 22px; background: var(--card); border: 1px solid var(--border);
     border-top: 3px solid var(--phil-gelb); padding: 14px 16px 16px;
@@ -197,10 +213,11 @@
     <button id="modeAuto" class="active" type="button">Automatisch ausgleichen</button>
     <button id="modeCheck" type="button">Selbst ausgleichen &amp; prüfen</button>
     <button id="modeStruct" type="button">Strukturformeln (OC)</button>
+    <button id="modeMech" type="button">Mechanismen</button>
   </div>
   <p class="hint" id="modeHint"></p>
 
-  <div class="input-row">
+  <div class="input-row" id="inputRow">
     <input id="eq" placeholder="z. B. CH4 + O2 -> CO2 + H2O" spellcheck="false" autocomplete="off" autocapitalize="off">
     <select id="examples">
       <option value="">Beispiele …</option>
@@ -231,6 +248,18 @@
     <label class="opt-label" title="Nur bei „C &amp; H ausgeschrieben“ wählbar">
       <input type="checkbox" id="epPairs" disabled> freie Elektronenpaare
     </label>
+  </div>
+
+  <div class="input-row" id="mechOptions" hidden>
+    <select id="mechType" aria-label="Mechanismus"></select>
+    <select id="mechSub" aria-label="Substrat"></select>
+    <select id="mechNu" aria-label="Nucleophil"></select>
+  </div>
+  <div class="input-row" id="mechNav" hidden>
+    <button id="mechPrev" type="button">◀ Zurück</button>
+    <span id="mechStepLabel" class="opt-label">Schritt 1/1</span>
+    <button id="mechNext" type="button">Weiter ▶</button>
+    <button id="mechAnim3d" type="button" title="">🧊 3D-Ansicht</button>
   </div>
 
   <div id="feedback" aria-live="polite"></div>
@@ -289,6 +318,9 @@
     Ionen/Ladungen in eckigen Klammern: <code>[NH4+]</code>, <code>[O-]</code>, <code>CC(=O)[O-]</code> (Acetat) ·
     getrennte Teilchen mit <code>.</code> (<code>[Na+].[Cl-]</code>) · mehrere/verwachsene Ringe und Fragmente
     werden als 3D-Modell statt 2D dargestellt.
+    <br><strong>Mechanismen:</strong> SN1/SN2 Schritt für Schritt mit Elektronenverschiebungspfeilen,
+    wählbarem Substrat und Nucleophil, begründeter SN1/SN2-Abwägung und 3D-Ansicht
+    (SN2-Animation bzw. planares Carbenium-Ion).
     <p class="made">
       Open Source (MIT) ·
       <a href="https://github.com/f1nkster/chedit" target="_blank" rel="noopener">Quellcode auf GitHub</a> ·
@@ -1238,7 +1270,10 @@ function renderMolecule(canvas, mol, style, opts) {
   layoutMol(mol, L, opts.geometry || "zigzag");
   const pos = mol.pos;
   const n = mol.atoms.length;
-  const ctx = canvas.getContext("2d");
+  // opts.embed = {ctx, ox, oy}: in einen fremden, bereits skalierten Kontext zeichnen
+  // (Komposition von Mechanismus-Szenen); canvas darf dann null sein.
+  const embed = opts.embed || null;
+  const ctx = embed ? embed.ctx : canvas.getContext("2d");
   const fontN = `${fs}px ${opts.fontFamily}`;
   const fontS = `${Math.round(fs * 0.72)}px ${opts.fontFamily}`;
 
@@ -1392,14 +1427,19 @@ function renderMolecule(canvas, mol, style, opts) {
 
   const pad = fs * 0.8;
   const w = Math.ceil(maxX - minX + 2 * pad), h = Math.ceil(maxY - minY + 2 * pad);
-  canvas.width = Math.max(1, Math.round(w * opts.scale));
-  canvas.height = Math.max(1, Math.round(h * opts.scale));
-  canvas.style.width = w + "px";
-  canvas.style.height = h + "px";
-  ctx.setTransform(opts.scale, 0, 0, opts.scale, 0, 0);
-  if (opts.background) { ctx.fillStyle = opts.background; ctx.fillRect(0, 0, w, h); }
-  else ctx.clearRect(0, 0, w, h);
-  ctx.translate(pad - minX, pad - minY);
+  if (embed) {
+    ctx.save();
+    ctx.translate(embed.ox + pad - minX, embed.oy + pad - minY);
+  } else {
+    canvas.width = Math.max(1, Math.round(w * opts.scale));
+    canvas.height = Math.max(1, Math.round(h * opts.scale));
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    ctx.setTransform(opts.scale, 0, 0, opts.scale, 0, 0);
+    if (opts.background) { ctx.fillStyle = opts.background; ctx.fillRect(0, 0, w, h); }
+    else ctx.clearRect(0, 0, w, h);
+    ctx.translate(pad - minX, pad - minY);
+  }
   ctx.strokeStyle = "#111111";
   ctx.fillStyle = "#111111";
   ctx.lineWidth = Math.max(1.4, fs * 0.09);
@@ -1475,6 +1515,16 @@ function renderMolecule(canvas, mol, style, opts) {
   draws.forEach(d => drawLabel(d.lb.t, d.x, d.y, d.shift, d.lb.sup));
   ctx.font = fontN;
   hNodes.forEach(hn => drawLabel("H", hn.x, hn.y, ctx.measureText("H").width / 2));
+  // Bildschirmkoordinaten (relativ zur linken oberen Ecke der Zeichnung) für
+  // Pfeil-Anker in Mechanismus-Szenen aufzeichnen
+  const offX = pad - minX, offY = pad - minY;
+  mol.render = {
+    w, h,
+    atoms: pos.map(p => [p[0] + offX, p[1] + offY]),
+    hs: hNodes.map(hn => [hn.x + offX, hn.y + offY, hn.from]),
+    lps: lpMarks.map(m2 => [m2.x + m2.r * Math.cos(m2.ang) + offX, m2.y + m2.r * Math.sin(m2.ang) + offY, m2.i])
+  };
+  if (embed) ctx.restore();
   return { w, h };
 }
 
@@ -1482,8 +1532,9 @@ function renderMolecule(canvas, mol, style, opts) {
 function createSvgTarget() {
   const measCtx = document.createElement("canvas").getContext("2d");
   const els = [];
-  const state = { font: "16px Arial", fillStyle: "#000", strokeStyle: "#000", lineWidth: 1, lineCap: "butt" };
+  const state = { font: "16px Arial", fillStyle: "#000", strokeStyle: "#000", lineWidth: 1, lineCap: "butt", dash: null };
   const tf = { s: 1, tx: 0, ty: 0 };
+  const stack = [];
   let path = [];
   const X = x => (x * tf.s + tf.tx).toFixed(2);
   const Y = y => (y * tf.s + tf.ty).toFixed(2);
@@ -1512,15 +1563,27 @@ function createSvgTarget() {
     beginPath() { path = []; },
     moveTo(x, y) { path.push(`M ${X(x)} ${Y(y)}`); },
     lineTo(x, y) { path.push(`L ${X(x)} ${Y(y)}`); },
+    quadraticCurveTo(cx, cy, x, y) { path.push(`Q ${X(cx)} ${Y(cy)} ${X(x)} ${Y(y)}`); },
+    closePath() { path.push("Z"); },
     stroke() {
-      if (path.length) els.push(`<path d="${path.join(" ")}" stroke="${esc(state.strokeStyle)}" stroke-width="${(state.lineWidth * tf.s).toFixed(2)}" stroke-linecap="${esc(state.lineCap)}" fill="none"/>`);
+      if (path.length) els.push(`<path d="${path.join(" ")}" stroke="${esc(state.strokeStyle)}" stroke-width="${(state.lineWidth * tf.s).toFixed(2)}" stroke-linecap="${esc(state.lineCap)}"` +
+        (state.dash ? ` stroke-dasharray="${state.dash}"` : "") + ` fill="none"/>`);
     },
+    fill() {
+      if (path.length) els.push(`<path d="${path.join(" ")}" fill="${esc(state.fillStyle)}" stroke="none"/>`);
+    },
+    setLineDash(arr) { state.dash = arr && arr.length ? arr.map(v => (v * tf.s).toFixed(2)).join(",") : null; },
     fillRect(x, y, w2, h2) {
       els.push(`<rect x="${X(x)}" y="${Y(y)}" width="${(w2 * tf.s).toFixed(2)}" height="${(h2 * tf.s).toFixed(2)}" fill="${esc(state.fillStyle)}"/>`);
     },
     clearRect() {},
     setTransform(a, b, c, d, e, f2) { tf.s = a; tf.tx = e; tf.ty = f2; },
-    translate(x, y) { tf.tx += x * tf.s; tf.ty += y * tf.s; }
+    translate(x, y) { tf.tx += x * tf.s; tf.ty += y * tf.s; },
+    save() { stack.push({ st: Object.assign({}, state), tf: Object.assign({}, tf) }); },
+    restore() {
+      const s2 = stack.pop();
+      if (s2) { Object.assign(state, s2.st); Object.assign(tf, s2.tf); }
+    }
   };
   const target = {
     width: 0, height: 0, style: {},
@@ -1533,6 +1596,414 @@ function createSvgTarget() {
   return target;
 }
 
+/* ================== Reaktionsmechanismen (kuratierte Bibliothek) ================== */
+const MECH_TYPES = [
+  ["sn2", "Nukleophile Substitution – SN2"],
+  ["sn1", "Nukleophile Substitution – SN1"]
+];
+const MECH_SUBSTRATES = {
+  mebr: { label: "Brommethan CH₃Br (Methyl)", smiles: "CBr", cat: "[CH3+]", klass: "Methyl", subs: ["H", "H", "H"] },
+  prim: { label: "1-Brombutan (primär)", smiles: "CCCCBr", cat: "CCC[CH2+]", klass: "primär", subs: ["H", "H", "C3H7"] },
+  sek:  { label: "2-Brombutan (sekundär)", smiles: "CC(Br)CC", cat: "C[CH+]CC", klass: "sekundär", subs: ["H", "CH3", "C2H5"] },
+  tert: { label: "2-Brom-2-methylpropan (tertiär)", smiles: "CC(C)(C)Br", cat: "C[C+](C)C", klass: "tertiär", subs: ["CH3", "CH3", "CH3"] }
+};
+const MECH_NUCLEOPHILES = {
+  oh:  { label: "Hydroxid-Ion OH⁻ (starkes Nucleophil)", smiles: "[OH-]", strong: true, neutral: false, ts: "HO", prod: s => s.replace("Br", "O") },
+  h2o: { label: "Wasser H₂O (schwaches Nucleophil)", smiles: "O", strong: false, neutral: true, ts: "H2O", prod: s => s.replace("Br", "O"), prodOx: s => s.replace("Br", "[OH2+]") },
+  i:   { label: "Iodid-Ion I⁻ (starkes Nucleophil)", smiles: "[I-]", strong: true, neutral: false, ts: "I", prod: s => s.replace("Br", "I") }
+};
+
+// Didaktische Abwägung SN1 vs. SN2 für die gewählte Kombination
+function mechAssessment(subKey, nuKey) {
+  const sub = MECH_SUBSTRATES[subKey], nu = MECH_NUCLEOPHILES[nuKey];
+  const g = [];
+  let emp;
+  if (subKey === "mebr" || subKey === "prim") {
+    emp = "sn2";
+    g.push(sub.klass === "Methyl"
+      ? "Methyl-Substrat: ein Methyl-Kation wäre viel zu instabil für SN1"
+      : "primäres Substrat: das Carbenium-Ion wäre zu instabil für SN1");
+    g.push("Rückseite des C-Atoms gut zugänglich (geringe sterische Hinderung) → SN2");
+    if (nu.neutral) g.push("Wasser ist allerdings ein schwaches Nucleophil – die Reaktion verläuft langsam");
+  } else if (subKey === "tert") {
+    emp = "sn1";
+    g.push("tertiäres Substrat: stabiles Carbenium-Ion (+I-Effekt der drei Alkylgruppen) → SN1");
+    g.push("Rückseitenangriff sterisch stark gehindert – SN2 kaum möglich");
+  } else {
+    if (nu.strong) {
+      emp = "sn2";
+      g.push("sekundäres Substrat: SN1 und SN2 grundsätzlich beide möglich");
+      g.push("das starke Nucleophil begünstigt hier SN2");
+    } else {
+      emp = "sn1";
+      g.push("sekundäres Substrat: SN1 und SN2 grundsätzlich beide möglich");
+      g.push("schwaches Nucleophil (Wasser) und polar-protisches Lösungsmittel begünstigen SN1");
+    }
+  }
+  return { empfohlen: emp, gruende: g };
+}
+
+// Schrittfolgen: jede Szene beschreibt Moleküle, Elektronenpfeile und δ-Labels
+function buildMechSteps(mech, subKey, nuKey) {
+  const sub = MECH_SUBSTRATES[subKey], nu = MECH_NUCLEOPHILES[nuKey];
+  const nuItem = { kind: "mol", id: "nu", input: nu.smiles, lonePairs: true };
+  const subItem = { kind: "mol", id: "sub", input: sub.smiles, lonePairs: true };
+  const brItem = { kind: "mol", id: "br", input: "[Br-]", lonePairs: true };
+  const steps = [];
+  const prodInput = nu.neutral ? nu.prodOx(sub.smiles) : nu.prod(sub.smiles);
+  const deproStep = {
+    title: "Deprotonierung",
+    text: "Ein weiteres Wassermolekül übernimmt das Proton vom Oxonium-Ion – es entstehen der Alkohol und H₃O⁺.",
+    scene: { items: [{ kind: "mol", id: "p", input: nu.prod(sub.smiles), lonePairs: true }, { kind: "plus" }, { kind: "mol", id: "h3o", input: "[OH3+]" }], curves: [], labels: [] }
+  };
+  if (mech === "sn2") {
+    steps.push({
+      title: "Rückseitenangriff",
+      text: "Das freie Elektronenpaar des Nucleophils greift das partiell positiv geladene C-Atom von der dem Brom abgewandten Seite an. Gleichzeitig verschiebt sich das Bindungselektronenpaar der C–Br-Bindung zum Brom – alles in einem Schritt (bimolekular).",
+      scene: {
+        items: [nuItem, { kind: "gap" }, subItem],
+        curves: [
+          { from: { id: "nu", lp: "auto" }, to: { id: "sub", sel: "brC" }, bend: -1.5 },
+          { from: { id: "sub", bond: ["brC", "br"] }, to: { id: "sub", sel: "br", dx: 0.5, dy: -1.5 }, bend: -1.0 }
+        ],
+        labels: [
+          { id: "sub", sel: "brC", text: "δ+" },
+          { id: "sub", sel: "br", text: "δ−" }
+        ]
+      }
+    });
+    steps.push({
+      title: "Übergangszustand",
+      text: "Die neue Bindung ist erst teilweise geknüpft, die alte erst teilweise gebrochen – fünf Gruppen gleichzeitig am C-Atom (trigonal-bipyramidal). Die drei Substituenten klappen dabei wie ein Regenschirm um (Walden-Umkehr).",
+      scene: { items: [{ kind: "ts", nu: nu.ts, nuNeg: !nu.neutral, lg: "Br", subs: sub.subs }], curves: [], labels: [] }
+    });
+    steps.push({
+      title: "Produkte",
+      text: nu.neutral
+        ? "Es entstehen zunächst das protonierte Produkt (Oxonium-Ion) und das Bromid-Ion."
+        : "Substitutionsprodukt und Bromid-Ion. Die räumliche Anordnung am angegriffenen C-Atom hat sich umgekehrt (Walden-Umkehr).",
+      scene: { items: [{ kind: "mol", id: "p", input: prodInput, lonePairs: true }, { kind: "plus" }, brItem], curves: [], labels: [] }
+    });
+    if (nu.neutral) steps.push(deproStep);
+  } else {
+    steps.push({
+      title: "Heterolytische Spaltung (langsam)",
+      text: "Die C–Br-Bindung bricht heterolytisch: Das Brom nimmt beide Bindungselektronen mit. Dieser unimolekulare Schritt ist geschwindigkeitsbestimmend.",
+      scene: {
+        items: [subItem],
+        curves: [{ from: { id: "sub", bond: ["brC", "br"] }, to: { id: "sub", sel: "br", dx: 0.5, dy: -1.5 }, bend: -1.0 }],
+        labels: [
+          { id: "sub", sel: "brC", text: "δ+" },
+          { id: "sub", sel: "br", text: "δ−" }
+        ]
+      }
+    });
+    steps.push({
+      title: "Carbenium-Ion (Zwischenstufe)",
+      text: "Es entsteht ein planares Carbenium-Ion (sp²). Je mehr Alkylgruppen es durch ihren +I-Effekt stabilisieren, desto leichter läuft dieser Schritt – deshalb bevorzugen tertiäre Substrate SN1.",
+      scene: { items: [{ kind: "mol", id: "cat", input: sub.cat }, { kind: "plus" }, brItem], curves: [], labels: [] }
+    });
+    steps.push({
+      title: "Angriff des Nucleophils (schnell)",
+      text: "Das Nucleophil greift das positiv geladene C-Atom an – von beiden Seiten der Ebene gleich gut. An einem Stereozentrum entsteht deshalb ein Racemat.",
+      scene: {
+        items: [nuItem, { kind: "gap" }, { kind: "mol", id: "cat", input: sub.cat }],
+        curves: [{ from: { id: "nu", lp: "auto" }, to: { id: "cat", sel: "cplus" }, bend: -1.5 }],
+        labels: []
+      }
+    });
+    steps.push({
+      title: nu.neutral ? "Oxonium-Zwischenprodukt" : "Produkt",
+      text: nu.neutral
+        ? "Mit Wasser als Nucleophil entsteht zunächst das protonierte Produkt (Oxonium-Ion)."
+        : "Das Substitutionsprodukt ist entstanden; das Bromid wurde bereits in Schritt 1 abgespalten.",
+      scene: { items: [{ kind: "mol", id: "p", input: prodInput, lonePairs: true }], curves: [], labels: [] }
+    });
+    if (nu.neutral) steps.push(deproStep);
+  }
+  return steps;
+}
+
+/* ---------- Zeichnen der Mechanismus-Szenen ---------- */
+function drawCurvedArrow(ctx, p1, p2, bend, color, fs) {
+  const mx = (p1[0] + p2[0]) / 2, my = (p1[1] + p2[1]) / 2;
+  const dx = p2[0] - p1[0], dy = p2[1] - p1[1], len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  const cx = mx + nx * bend, cy = my + ny * bend;
+  ctx.strokeStyle = color; ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(1.4, fs * 0.09); ctx.lineCap = "round"; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.quadraticCurveTo(cx, cy, p2[0], p2[1]); ctx.stroke();
+  // Pfeilspitze in Tangentenrichtung
+  const tx = p2[0] - cx, ty = p2[1] - cy, tl = Math.hypot(tx, ty) || 1, ux = tx / tl, uy = ty / tl;
+  const s = fs * 0.45, px = -uy, py = ux;
+  ctx.beginPath();
+  ctx.moveTo(p2[0], p2[1]);
+  ctx.lineTo(p2[0] - ux * s + px * s * 0.5, p2[1] - uy * s + py * s * 0.5);
+  ctx.lineTo(p2[0] - ux * s - px * s * 0.5, p2[1] - uy * s - py * s * 0.5);
+  ctx.closePath(); ctx.fill();
+}
+
+function measureTs(ctx, data, fs, fontN, fontS) {
+  const tw = t => { let w2 = 0; for (const ch of t) { ctx.font = /\d/.test(ch) ? fontS : fontN; w2 += ctx.measureText(ch).width; } return w2; };
+  ctx.font = fontN;
+  const cW = ctx.measureText("C").width;
+  const dash = fs * 1.5;
+  const chain = fs * 0.7 + tw(data.nu) + dash + fs * 0.3 + cW + dash + fs * 0.15 + tw(data.lg);
+  const w = Math.max(chain, fs * 0.7 + tw(data.nu) + dash + fs * 0.3 + cW / 2 + fs * 2.8) + fs * 1.4;
+  return { w, h: fs * 5.4, dash };
+}
+
+function drawTs(ctx, ox, oy, data, m, fs, fontN, fontS) {
+  const yC = oy + m.h * 0.5;
+  function drawF(text, x, y) {
+    let cx = x;
+    for (const ch of text) {
+      const sub = /\d/.test(ch);
+      ctx.font = sub ? fontS : fontN;
+      ctx.fillText(ch, cx, y + (sub ? fs * 0.2 : 0));
+      cx += ctx.measureText(ch).width;
+    }
+    return cx;
+  }
+  ctx.strokeStyle = "#111111"; ctx.fillStyle = "#111111";
+  ctx.lineWidth = Math.max(1.4, fs * 0.09); ctx.lineCap = "round";
+  const xNu = ox + fs * 0.7;
+  const nuEnd = drawF(data.nu, xNu, yC + fs * 0.35);
+  const xC = nuEnd + m.dash + fs * 0.3;
+  ctx.font = fontN;
+  const cW = ctx.measureText("C").width;
+  drawF("C", xC, yC + fs * 0.35);
+  const xLg = xC + cW + m.dash + fs * 0.15;
+  const lgEnd = drawF(data.lg, xLg, yC + fs * 0.35);
+  // Partialladungen
+  ctx.font = "italic " + fontS;
+  if (data.nuNeg) ctx.fillText("δ−", xNu, yC - fs * 1.2);
+  ctx.fillText("δ−", xLg, yC - fs * 1.2);
+  // gestrichelte Teilbindungen
+  ctx.setLineDash([fs * 0.3, fs * 0.26]);
+  ctx.beginPath(); ctx.moveTo(nuEnd + fs * 0.2, yC); ctx.lineTo(xC - fs * 0.2, yC); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(xC + cW + fs * 0.2, yC); ctx.lineTo(xLg - fs * 0.2, yC); ctx.stroke();
+  ctx.setLineDash([]);
+  // drei Substituenten am zentralen C
+  const cx0 = xC + cW / 2, cy0 = yC;
+  const dirs = [[0, -1], [-0.62, 0.86], [0.62, 0.86]];
+  data.subs.forEach((s2, i2) => {
+    const [dx2, dy2] = dirs[i2];
+    ctx.beginPath();
+    ctx.moveTo(cx0 + dx2 * fs * 0.55, cy0 + dy2 * fs * 0.55);
+    ctx.lineTo(cx0 + dx2 * fs * 1.5, cy0 + dy2 * fs * 1.5);
+    ctx.stroke();
+    let wS = 0;
+    for (const ch of s2) { ctx.font = /\d/.test(ch) ? fontS : fontN; wS += ctx.measureText(ch).width; }
+    drawF(s2, cx0 + dx2 * fs * 2.1 - wS / 2, cy0 + dy2 * fs * 2.15 + fs * 0.32);
+  });
+  // Klammern + ‡
+  const bTop = oy + fs * 0.35, bBot = oy + m.h - fs * 0.15;
+  const bl = ox + fs * 0.2, br2 = Math.max(lgEnd, cx0 + fs * 2.8) + fs * 0.45;
+  ctx.beginPath(); ctx.moveTo(bl + fs * 0.22, bTop); ctx.lineTo(bl, bTop); ctx.lineTo(bl, bBot); ctx.lineTo(bl + fs * 0.22, bBot); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(br2 - fs * 0.22, bTop); ctx.lineTo(br2, bTop); ctx.lineTo(br2, bBot); ctx.lineTo(br2 - fs * 0.22, bBot); ctx.stroke();
+  ctx.font = fontN;
+  ctx.fillText("‡", br2 + fs * 0.12, bTop + fs * 0.55);
+}
+
+// Komplette Szene (Moleküle, Pfeile, Labels) auf Canvas oder SVG-Ziel zeichnen
+function renderMechScene(target, scene, opts) {
+  const fsBase = opts.fontSize;
+  const fs = Math.max(12, Math.round(fsBase * 0.72));
+  const fontN = `${fs}px ${opts.fontFamily}`;
+  const fontS = `${Math.round(fs * 0.72)}px ${opts.fontFamily}`;
+  const molOpts = { fontSize: fsBase, fontFamily: opts.fontFamily, geometry: "zigzag", scale: 1, background: null };
+  const gap = fs * 1.15;
+
+  // Phase 1: Größen bestimmen (Moleküle einmal auf einen Wegwerf-Canvas rendern)
+  const scratch = document.createElement("canvas");
+  const sctx = scratch.getContext("2d");
+  const rendered = [];
+  for (const it of scene.items) {
+    if (it.kind === "mol") {
+      const mol = parseStructOrName(it.input);
+      renderMolecule(scratch, mol, "full", Object.assign({}, molOpts, { lonePairs: !!it.lonePairs }));
+      rendered.push({ it, mol, w: mol.render.w, h: mol.render.h });
+    } else if (it.kind === "plus" || it.kind === "rarrow") {
+      sctx.font = fontN;
+      const s = it.kind === "plus" ? "+" : "⟶";
+      rendered.push({ it, text: s, w: sctx.measureText(s).width + fs * 0.6, h: fs * 1.4 });
+    } else if (it.kind === "gap") {
+      rendered.push({ it, w: fs * 2.0, h: 1 });
+    } else if (it.kind === "ts") {
+      const m = measureTs(sctx, it, fs, fontN, fontS);
+      rendered.push({ it, ts: m, w: m.w, h: m.h });
+    }
+  }
+  const hasDecor = (scene.curves && scene.curves.length) || (scene.labels && scene.labels.length);
+  const extraTop = hasDecor ? fs * 2.6 : fs * 0.5;
+  const padBot = fs * 0.7, padSide = fs * 0.7;
+  const W = rendered.reduce((s2, r) => s2 + r.w, 0) + gap * Math.max(0, rendered.length - 1) + padSide * 2;
+  const H = Math.max(...rendered.map(r => r.h)) + extraTop + padBot;
+
+  target.width = Math.max(1, Math.round(W * opts.scale));
+  target.height = Math.max(1, Math.round(H * opts.scale));
+  if (target.style) { target.style.width = W + "px"; target.style.height = H + "px"; }
+  const ctx = target.getContext("2d");
+  ctx.setTransform(opts.scale, 0, 0, opts.scale, 0, 0);
+  if (opts.background) { ctx.fillStyle = opts.background; ctx.fillRect(0, 0, W, H); }
+  else if (ctx.clearRect) ctx.clearRect(0, 0, W, H);
+
+  // Phase 2: zeichnen
+  const midY = extraTop + (H - extraTop - padBot) / 2;
+  const byId = {};
+  let x = padSide;
+  for (const r of rendered) {
+    const oy = midY - r.h / 2;
+    if (r.mol) {
+      renderMolecule(null, r.mol, "full", Object.assign({}, molOpts, { lonePairs: !!r.it.lonePairs, embed: { ctx, ox: x, oy } }));
+      if (r.it.id) byId[r.it.id] = { origin: [x, oy], render: r.mol.render, mol: r.mol };
+    } else if (r.text) {
+      ctx.font = fontN; ctx.fillStyle = "#111111";
+      ctx.fillText(r.text, x + fs * 0.3, midY + fs * 0.35);
+    } else if (r.ts) {
+      drawTs(ctx, x, oy, r.it, r.ts, fs, fontN, fontS);
+    }
+    x += r.w + gap;
+  }
+
+  // Anker auflösen
+  function atomIndexBySel(entry, sel) {
+    const mol = entry.mol;
+    if (sel === "br") return mol.atoms.findIndex(a2 => a2.el === "Br");
+    if (sel === "brC") {
+      const br = mol.atoms.findIndex(a2 => a2.el === "Br");
+      const b = mol.bonds.find(x2 => x2.a === br || x2.b === br);
+      return b.a === br ? b.b : b.a;
+    }
+    if (sel === "cplus") return mol.atoms.findIndex(a2 => (a2.charge || 0) > 0);
+    return 0;
+  }
+  function point(ref, other) {
+    const e = byId[ref.id];
+    let p;
+    if (ref.bond) {
+      const a1 = e.render.atoms[atomIndexBySel(e, ref.bond[0])];
+      const a2 = e.render.atoms[atomIndexBySel(e, ref.bond[1])];
+      p = [(a1[0] + a2[0]) / 2, (a1[1] + a2[1]) / 2];
+    } else if (ref.lp === "auto") {
+      const lps = e.render.lps;
+      if (lps && lps.length && other) {
+        let best = lps[0], bd = Infinity;
+        lps.forEach(q => {
+          const d = Math.hypot(q[0] + e.origin[0] - other[0], q[1] + e.origin[1] - other[1]);
+          if (d < bd) { bd = d; best = q; }
+        });
+        p = best.slice();
+      } else p = e.render.atoms[0].slice();
+    } else {
+      p = e.render.atoms[atomIndexBySel(e, ref.sel)].slice();
+    }
+    return [p[0] + e.origin[0] + (ref.dx || 0) * fs, p[1] + e.origin[1] + (ref.dy || 0) * fs];
+  }
+  const curvePts = []; // Pfeil-Punkte, damit δ-Labels ihnen ausweichen
+  for (const c of (scene.curves || [])) {
+    const p2 = point(c.to, null);
+    const p1 = point(c.from, p2);
+    const d = [p2[0] - p1[0], p2[1] - p1[1]], L2 = Math.hypot(d[0], d[1]) || 1;
+    const u = [d[0] / L2, d[1] / L2];
+    const startGap = c.from.bond ? fs * 0.05 : fs * 0.25;
+    const endGap = (c.to.dx || c.to.dy) ? fs * 0.15 : fs * 0.9;
+    const q1 = [p1[0] + u[0] * startGap, p1[1] + u[1] * startGap];
+    const q2 = [p2[0] - u[0] * endGap, p2[1] - u[1] * endGap];
+    // Scheitelpunkt des Bogens ebenfalls meiden
+    const nx = -u[1], ny = u[0], bend = (c.bend || 1) * fs;
+    curvePts.push(q1, q2, [(q1[0] + q2[0]) / 2 + nx * bend * 0.5, (q1[1] + q2[1]) / 2 + ny * bend * 0.5]);
+    drawCurvedArrow(ctx, q1, q2, bend, "#b91c1c", fs);
+  }
+  ctx.fillStyle = "#111111";
+  ctx.font = "italic " + fontS;
+  for (const lb of (scene.labels || [])) {
+    const e = byId[lb.id];
+    const idx = atomIndexBySel(e, lb.sel);
+    const p = e.render.atoms[idx];
+    let dx = lb.dx, dy = lb.dy;
+    if (dx === undefined && dy === undefined) {
+      // freie Richtung am Atom suchen (Bindungen, H-Knoten und Elektronenpaare meiden)
+      const taken = [];
+      e.mol.bonds.forEach(b => {
+        const o = b.a === idx ? b.b : (b.b === idx ? b.a : -1);
+        if (o >= 0) { const q = e.render.atoms[o]; taken.push(Math.atan2(q[1] - p[1], q[0] - p[0])); }
+      });
+      [...(e.render.hs || []), ...(e.render.lps || [])].forEach(q => {
+        if (q[2] === idx) taken.push(Math.atan2(q[1] - p[1], q[0] - p[0]));
+      });
+      // Pfeil-Punkte in der Nähe meiden
+      const abs = [p[0] + e.origin[0], p[1] + e.origin[1]];
+      curvePts.forEach(q => {
+        if (Math.hypot(q[0] - abs[0], q[1] - abs[1]) < fs * 2.4) taken.push(Math.atan2(q[1] - abs[1], q[0] - abs[0]));
+      });
+      let best = -Math.PI / 2, bs = -1;
+      for (let c2 = 0; c2 < 12; c2++) {
+        const ang = c2 * Math.PI / 6;
+        let mind = 7;
+        taken.forEach(t => { let d2 = Math.abs(ang - t) % (2 * Math.PI); if (d2 > Math.PI) d2 = 2 * Math.PI - d2; mind = Math.min(mind, d2); });
+        if (mind > bs + 1e-9) { bs = mind; best = ang; }
+      }
+      dx = Math.cos(best) * 1.5;
+      dy = Math.sin(best) * 1.5 + 0.3; // Baseline-Ausgleich
+    }
+    ctx.fillText(lb.text, p[0] + e.origin[0] + dx * fs - fs * 0.3, p[1] + e.origin[1] + dy * fs);
+  }
+  return { w: W, h: H };
+}
+
+/* ---------- 3D-Daten für die Mechanismen (XYZ, für JSmol) ---------- */
+// SN2-Rückseitenangriff an CH3Br als Trajektorie (schematisch, interpoliert)
+function sn2AnimXyz(nuKey) {
+  const N = 18, frames = [];
+  for (let f = 0; f < N; f++) {
+    const t = f / (N - 1);
+    const atoms = [];
+    const dBr = 1.94 + t * 1.7;
+    const dNu = nuKey === "i" ? 3.6 - t * (3.6 - 2.16) : 3.2 - t * (3.2 - 1.43);
+    const th = (109.47 - t * 38.9) * Math.PI / 180; // H-Winkel zur C–Br-Achse (Schirm klappt um)
+    atoms.push(["C", 0, 0, 0]);
+    atoms.push(["Br", 0, 0, dBr]);
+    for (let k = 0; k < 3; k++) {
+      const ph = k * 2 * Math.PI / 3;
+      atoms.push(["H", 1.09 * Math.sin(th) * Math.cos(ph), 1.09 * Math.sin(th) * Math.sin(ph), 1.09 * Math.cos(th)]);
+    }
+    if (nuKey === "i") atoms.push(["I", 0, 0, -dNu]);
+    else {
+      atoms.push(["O", 0, 0, -dNu]);
+      const hz = -dNu - 0.31, hr = 0.91;
+      if (nuKey === "oh") atoms.push(["H", hr, 0, hz]);
+      else { atoms.push(["H", hr * 0.62, hr * 0.78, hz]); atoms.push(["H", hr * 0.62, -hr * 0.78, hz]); }
+    }
+    frames.push(atoms.length + "\nSN2-Schema t=" + t.toFixed(2) + "\n" +
+      atoms.map(a => a[0] + "  " + a[1].toFixed(3) + "  " + a[2].toFixed(3) + "  " + a[3].toFixed(3)).join("\n"));
+  }
+  return frames.join("\n");
+}
+
+// planares tert-Butyl-Kation (Handgeometrie, sp² am zentralen C)
+function carbeniumTertXyz() {
+  const atoms = [["C", 0, 0, 0]];
+  const ct = Math.cos(70.53 * Math.PI / 180), st = Math.sin(70.53 * Math.PI / 180);
+  for (let k = 0; k < 3; k++) {
+    const a = k * 2 * Math.PI / 3;
+    const ax = Math.cos(a), ay = Math.sin(a);
+    const cx = 1.46 * ax, cy = 1.46 * ay;
+    atoms.push(["C", cx, cy, 0]);
+    for (let j = 0; j < 3; j++) {
+      const ph = j * 2 * Math.PI / 3 + (k % 2 ? 0.5 : 0);
+      // Orthonormalbasis: a=(ax,ay,0), u=(0,0,1), v=(ay,−ax,0)
+      const dx = ct * ax + st * Math.sin(ph) * ay;
+      const dy = ct * ay - st * Math.sin(ph) * ax;
+      const dz = st * Math.cos(ph);
+      atoms.push(["H", cx + 1.09 * dx, cy + 1.09 * dy, 1.09 * dz]);
+    }
+  }
+  return atoms.length + "\ntert-Butyl-Kation (planar, Schema)\n" +
+    atoms.map(a => a[0] + "  " + a[1].toFixed(3) + "  " + a[2].toFixed(3) + "  " + a[3].toFixed(3)).join("\n");
+}
+
 /* ---------- UI ---------- */
 const $ = id => document.getElementById(id);
 const eqInput = $("eq"), feedback = $("feedback"), statusEl = $("status");
@@ -1542,26 +2013,31 @@ const epCb = $("epPairs");
 const sheetSection = $("sheetSection"), sheetList = $("sheetList"), sheetCount = $("sheetCount"), sheetTitleIn = $("sheetTitle");
 const gapCb = $("gapCoefs"), solCb = $("withSolution");
 const fontSel = $("font"), sizeRange = $("size"), sizeVal = $("sizeVal"), transparentCb = $("transparent");
-const modeAutoBtn = $("modeAuto"), modeCheckBtn = $("modeCheck"), modeStructBtn = $("modeStruct"), modeHint = $("modeHint");
+const modeAutoBtn = $("modeAuto"), modeCheckBtn = $("modeCheck"), modeStructBtn = $("modeStruct"), modeMechBtn = $("modeMech"), modeHint = $("modeHint");
 const styleSkeletonBtn = $("styleSkeleton"), styleFullBtn = $("styleFull"), structOptions = $("structOptions");
 const geoZigzagBtn = $("geoZigzag"), geoLinearBtn = $("geoLinear");
 const examplesSel = $("examples");
+const inputRow = $("inputRow"), mechOptions = $("mechOptions"), mechNav = $("mechNav");
+const mechTypeSel = $("mechType"), mechSubSel = $("mechSub"), mechNuSel = $("mechNu");
 
-let mode = "auto";            // "auto" | "check" | "struct"
+let mode = "auto";            // "auto" | "check" | "struct" | "mech"
 let structStyle = "skeleton"; // "skeleton" | "full"
 let structGeo = "zigzag";     // "zigzag" | "linear" (nur bei "full" wirksam)
+let mechStep = 0;             // aktueller Mechanismus-Schritt (0-basiert)
 let currentDraw = null;       // (canvas, {scale, background}) => void
 let currentMol = null;        // aktuelles Molekül (für 3D-Ansicht)
 
 const HINTS = {
   auto: "Edukte und Produkte ohne Koeffizienten eingeben – das Tool berechnet die kleinsten ganzzahligen Koeffizienten.",
   check: "Gleichung mit selbst gewählten Koeffizienten eingeben (z. B. „2 H2 + O2 -> 2 H2O“) – das Tool prüft, ob sie ausgeglichen ist.",
-  struct: "Molekül als Halbstrukturformel (CH3-CH(CH3)-OH), SMILES (CCO) oder Name (Propan-2-ol, Essigsäure) eingeben – Darstellung als Skelettformel oder mit ausgeschriebenen C und H."
+  struct: "Molekül als Halbstrukturformel (CH3-CH(CH3)-OH), SMILES (CCO) oder Name (Propan-2-ol, Essigsäure) eingeben – Darstellung als Skelettformel oder mit ausgeschriebenen C und H.",
+  mech: "Lehrplan-Mechanismen Schritt für Schritt: Mechanismus, Substrat und Nucleophil wählen. Die SN1/SN2-Abwägung wird begründet; jeder Schritt lässt sich exportieren oder ins Arbeitsblatt übernehmen."
 };
 const PLACEHOLDERS = {
   auto: "z. B. CH4 + O2 -> CO2 + H2O",
   check: "z. B. 2 H2 + O2 -> 2 H2O",
-  struct: "z. B. CH3-CH2-OH, CCO oder Ethanol"
+  struct: "z. B. CH3-CH2-OH, CCO oder Ethanol",
+  mech: ""
 };
 const EXAMPLES = {
   eq: [
@@ -1610,20 +2086,24 @@ function fillExamples(kind) {
 
 function setMode(m) {
   mode = m;
-  [[modeAutoBtn, "auto"], [modeCheckBtn, "check"], [modeStructBtn, "struct"]].forEach(([btn, v]) => {
+  [[modeAutoBtn, "auto"], [modeCheckBtn, "check"], [modeStructBtn, "struct"], [modeMechBtn, "mech"]].forEach(([btn, v]) => {
     btn.classList.toggle("active", m === v);
     btn.setAttribute("aria-pressed", String(m === v));
   });
   structOptions.hidden = m !== "struct";
   $("view3d").hidden = m !== "struct";
+  inputRow.hidden = m === "mech";
+  mechOptions.hidden = m !== "mech";
+  mechNav.hidden = m !== "mech";
   modeHint.textContent = HINTS[m];
-  eqInput.placeholder = PLACEHOLDERS[m];
+  eqInput.placeholder = PLACEHOLDERS[m] || "";
   fillExamples(m === "struct" ? "struct" : "eq");
   update();
 }
 modeAutoBtn.addEventListener("click", () => setMode("auto"));
 modeCheckBtn.addEventListener("click", () => setMode("check"));
 modeStructBtn.addEventListener("click", () => setMode("struct"));
+modeMechBtn.addEventListener("click", () => setMode("mech"));
 
 function setStructStyle(s) {
   structStyle = s;
@@ -1649,6 +2129,62 @@ function setStructGeo(g) {
 geoZigzagBtn.addEventListener("click", () => setStructGeo("zigzag"));
 geoLinearBtn.addEventListener("click", () => setStructGeo("linear"));
 epCb.addEventListener("change", update);
+
+/* ---------- Mechanismus-Modus: Auswahl, Navigation, Darstellung ---------- */
+(function fillMechSelects() {
+  MECH_TYPES.forEach(([v, label]) => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = label;
+    mechTypeSel.appendChild(o);
+  });
+  Object.entries(MECH_SUBSTRATES).forEach(([v, def]) => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = def.label;
+    mechSubSel.appendChild(o);
+  });
+  Object.entries(MECH_NUCLEOPHILES).forEach(([v, def]) => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = def.label;
+    mechNuSel.appendChild(o);
+  });
+})();
+
+function renderMech() {
+  const m = mechTypeSel.value, s = mechSubSel.value, nuK = mechNuSel.value;
+  const steps = buildMechSteps(m, s, nuK);
+  if (mechStep > steps.length - 1) mechStep = steps.length - 1;
+  if (mechStep < 0) mechStep = 0;
+  const st = steps[mechStep];
+  $("mechStepLabel").textContent = `Schritt ${mechStep + 1}/${steps.length}`;
+  $("mechPrev").disabled = mechStep === 0;
+  $("mechNext").disabled = mechStep === steps.length - 1;
+  const a = mechAssessment(s, nuK);
+  const mismatch = a.empfohlen !== m;
+  feedback.innerHTML =
+    `<div><b>${escapeHtml(st.title)}:</b> ${escapeHtml(st.text)}</div>` +
+    `<div class="mech-box${mismatch ? " warn" : ""}"><b>Abwägung SN1/SN2:</b> ${a.gruende.map(escapeHtml).join(" · ")}.` +
+    (mismatch
+      ? `<br><b>Hinweis:</b> Für diese Kombination ist eher <b>${a.empfohlen.toUpperCase()}</b> zu erwarten – dargestellt wird der gewählte ${m.toUpperCase()}-Mechanismus.`
+      : ` → <b>${m.toUpperCase()}</b> ist hier der passende Mechanismus.`) +
+    `</div>`;
+  showPreview(
+    (cv, o) => renderMechScene(cv, st.scene, { fontSize: parseInt(sizeRange.value, 10), fontFamily: fontSel.value, scale: o.scale, background: o.background }),
+    `${m.toUpperCase()}, Schritt ${mechStep + 1} von ${steps.length}: ${st.title}. ${st.text}`
+  );
+  // 3D: SN2-Animation für CH3Br, planares Carbenium-Ion für tertiäres Substrat
+  const can3d = (m === "sn2" && s === "mebr") || (m === "sn1" && s === "tert");
+  $("mechAnim3d").disabled = !can3d;
+  $("mechAnim3d").title = can3d ? "" : "3D-Ansicht derzeit für Brommethan (SN2-Animation) bzw. tertiäres Substrat (planares Carbenium-Ion)";
+}
+[mechTypeSel, mechSubSel, mechNuSel].forEach(sel =>
+  sel.addEventListener("change", () => { mechStep = 0; renderMech(); }));
+$("mechPrev").addEventListener("click", () => { mechStep--; renderMech(); });
+$("mechNext").addEventListener("click", () => { mechStep++; renderMech(); });
+$("mechAnim3d").addEventListener("click", () => {
+  const m = mechTypeSel.value, s = mechSubSel.value;
+  if (m === "sn2" && s === "mebr") openViewer("3d.html?typ=xyz&anim=1#" + btoa(sn2AnimXyz(mechNuSel.value)));
+  else if (m === "sn1" && s === "tert") openViewer("3d.html?typ=xyz#" + btoa(carbeniumTertXyz()));
+});
 
 examplesSel.addEventListener("change", e => {
   if (e.target.value) {
@@ -1710,6 +2246,7 @@ function clearPreview(placeholderText) {
 function update() {
   setStatus("");
   currentMol = null;
+  if (mode === "mech") { renderMech(); return; }
   const raw = eqInput.value;
   if (!raw.trim()) {
     feedback.innerHTML = "";
@@ -1860,6 +2397,14 @@ btnLink.addEventListener("click", async () => {
       if (epCb.checked) u.searchParams.set("ep", "1");
     }
   }
+  if (mode === "mech") {
+    u.searchParams.delete("eq");
+    u.searchParams.set("mode", "mech");
+    u.searchParams.set("m", mechTypeSel.value);
+    u.searchParams.set("sub", mechSubSel.value);
+    u.searchParams.set("nu", mechNuSel.value);
+    u.searchParams.set("schritt", String(mechStep + 1));
+  }
   try {
     await navigator.clipboard.writeText(u.toString());
     setStatus("✔ Link kopiert – öffnet das Tool mit dieser Gleichung (auch zum Einbetten per oEmbed).", "ok");
@@ -1909,18 +2454,22 @@ function molToMolfile(mol) {
 }
 
 // Öffnet die mitgelieferte Viewer-Seite 3d.html in einem neuen Tab.
-view3dBtn.addEventListener("click", () => {
-  if (!currentMol) return;
+// Viewer-Seite öffnen: bevorzugt als Popup, sonst als Overlay im Tool
+function openViewer(url) {
   if (location.protocol === "file:") {
     setStatus("Die 3D-Ansicht braucht http(s) – bitte start-lokal.bat doppelklicken (startet einen lokalen Server) oder die Version auf dem Webserver nutzen.", "err");
     return;
   }
-  const url = "3d.html#" + btoa(molToMolfile(currentMol));
   // benanntes Popup: erneute Klicks nutzen dasselbe Fenster
   const win = window.open(url, "chedit3d", "popup=yes,width=680,height=600");
   if (win) { win.focus(); return; }
   // Popup blockiert (Popup-Blocker oder sandbox-iframe): Overlay im Tool öffnen
   open3dOverlay(url);
+}
+
+view3dBtn.addEventListener("click", () => {
+  if (!currentMol) return;
+  openViewer("3d.html#" + btoa(molToMolfile(currentMol)));
 });
 
 function open3dOverlay(url) {
@@ -1965,7 +2514,7 @@ function renderSheetList() {
     const li = document.createElement("li");
     const badge = document.createElement("span");
     badge.className = "badge";
-    badge.textContent = it.type === "struct" ? "Struktur" : "Gleichung";
+    badge.textContent = it.type === "struct" ? "Struktur" : it.type === "mech" ? "Mechanismus" : "Gleichung";
     const lbl = document.createElement("span");
     lbl.className = "sheet-item-label";
     lbl.textContent = it.input;
@@ -1990,7 +2539,13 @@ function renderSheetList() {
 btnAdd.addEventListener("click", () => {
   if (!currentDraw) return;
   const input = eqInput.value.trim();
-  if (mode === "struct") {
+  if (mode === "mech") {
+    const m = mechTypeSel.value, s = mechSubSel.value, nuK = mechNuSel.value;
+    sheet.push({
+      type: "mech", m, sub: s, nu: nuK, step: mechStep,
+      input: `${m.toUpperCase()} – ${MECH_SUBSTRATES[s].label} + ${MECH_NUCLEOPHILES[nuK].label}, Schritt ${mechStep + 1}`
+    });
+  } else if (mode === "struct") {
     sheet.push({ type: "struct", input, stil: structStyle, form: structGeo, ep: epCb.checked });
   } else {
     sheet.push({ type: "eq", input, mode });
@@ -2012,7 +2567,11 @@ gapCb.addEventListener("change", () => { solCb.disabled = !gapCb.checked; });
 function renderItemCanvas(item, gap) {
   const cv = document.createElement("canvas");
   const base = { fontSize: parseInt(sizeRange.value, 10), fontFamily: fontSel.value, scale: 3, background: "#ffffff" };
-  if (item.type === "struct") {
+  if (item.type === "mech") {
+    const steps = buildMechSteps(item.m, item.sub, item.nu);
+    const st = steps[Math.min(item.step, steps.length - 1)];
+    renderMechScene(cv, st.scene, base);
+  } else if (item.type === "struct") {
     const mol = parseStructOrName(item.input);
     renderMolecule(cv, mol, item.stil, {
       ...base,
@@ -2078,8 +2637,13 @@ if (startParams.get("eq")) eqInput.value = startParams.get("eq");
 if (startParams.get("stil") === "voll") setStructStyle("full");
 if (startParams.get("form") === "linear") setStructGeo("linear");
 if (startParams.get("ep") === "1") epCb.checked = true;
+// Mechanismus-Parameter (?m=sn1&sub=tert&nu=oh&schritt=2)
+if (startParams.get("m") && MECH_TYPES.some(([v]) => v === startParams.get("m"))) mechTypeSel.value = startParams.get("m");
+if (startParams.get("sub") && MECH_SUBSTRATES[startParams.get("sub")]) mechSubSel.value = startParams.get("sub");
+if (startParams.get("nu") && MECH_NUCLEOPHILES[startParams.get("nu")]) mechNuSel.value = startParams.get("nu");
+if (startParams.get("schritt")) mechStep = Math.max(0, (parseInt(startParams.get("schritt"), 10) || 1) - 1);
 const startMode = startParams.get("mode");
-setMode(startMode === "check" ? "check" : startMode === "struct" ? "struct" : "auto");
+setMode(startMode === "check" ? "check" : startMode === "struct" ? "struct" : startMode === "mech" ? "mech" : "auto");
 </script>
 </body>
 </html>

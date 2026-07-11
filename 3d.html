@@ -31,7 +31,9 @@
 <body>
 <header>
   <strong>🧊 ChEdit – 3D-Modell</strong>
-  <span class="note">Kraftfeld-optimierte Geometrie (Näherung) · Drehen: Maus · Zoom: Mausrad</span>
+  <span class="note" id="headNote">Kraftfeld-optimierte Geometrie (Näherung) · Drehen: Maus · Zoom: Mausrad</span>
+  <button id="stKal" type="button" disabled title="Zwischen Kugel-Stab- und Kalottenmodell umschalten">Kalotten</button>
+  <button id="stMess" type="button" disabled title="Abstände messen: zwei Atome nacheinander anklicken">📏 Messen</button>
   <button id="dlPng" type="button" disabled title="Ansicht als PNG-Bild speichern">⬇ PNG</button>
   <button id="dlSvg" type="button" disabled title="Ansicht als SVG speichern (eingebettetes Pixelbild)">⬇ SVG</button>
   <button id="dlMol" type="button" disabled title="3D-Koordinaten als MOL-Datei speichern (für Avogadro, Chimera …)">⬇ MOL (3D)</button>
@@ -88,6 +90,21 @@ document.getElementById("dlMol").addEventListener("click", () => {
   }
 });
 
+/* ---------- Darstellung & Messen (JSmol-Bedienung) ---------- */
+let kalotten = false, messen = false;
+document.getElementById("stKal").addEventListener("click", () => {
+  kalotten = !kalotten;
+  Jmol.script(applet, kalotten ? "wireframe off; spacefill 100%;" : "wireframe 0.15; spacefill 23%;");
+  document.getElementById("stKal").textContent = kalotten ? "Kugel–Stab" : "Kalotten";
+});
+document.getElementById("stMess").addEventListener("click", () => {
+  messen = !messen;
+  Jmol.script(applet, messen
+    ? "set picking MEASURE DISTANCE; set pickingStyle MEASURE ON;"
+    : "set picking ident; set pickingStyle MEASURE OFF; measure delete;");
+  document.getElementById("stMess").textContent = messen ? "📏 Messen beenden" : "📏 Messen";
+});
+
 /* ---------- Modell erst nach fertiger Optimierung zeigen ---------- */
 function finishModel() {
   if (modelDone || !applet) return;
@@ -95,7 +112,7 @@ function finishModel() {
   Jmol.script(applet, "center; zoom 0;");
   const ov = document.getElementById("optimiere");
   if (ov) ov.remove();
-  ["dlPng", "dlSvg", "dlMol"].forEach(id => { document.getElementById(id).disabled = false; });
+  ["dlPng", "dlSvg", "dlMol", "stKal", "stMess"].forEach(id => { document.getElementById(id).disabled = false; });
 }
 // wird von JSmol während der Minimierung aufgerufen (Status u. a. "starting", "calculate", "done")
 window.cheditMinDone = function () {
@@ -103,13 +120,22 @@ window.cheditMinDone = function () {
 };
 
 /* ---------- Start ---------- */
+// Payload im Hash: MOL-Datei (Standard) oder XYZ-Frames (typ=xyz, optional anim=1)
+const isXyz = params.get("typ") === "xyz";
+const isAnim = params.get("anim") === "1";
 let molfile = "";
 try { molfile = atob(location.hash.slice(1)); } catch (e) {}
+const payloadOk = isXyz ? /^\s*\d+/.test(molfile) : molfile.indexOf("V2000") >= 0;
+if (isXyz) {
+  document.getElementById("headNote").textContent = isAnim
+    ? "Schematische Animation (interpoliert, keine berechnete Reaktion) · Drehen: Maus · Zoom: Mausrad"
+    : "Schematische Geometrie · Drehen: Maus · Zoom: Mausrad";
+}
 if (location.protocol === "file:") {
   fail("Direkt aus dem Datei-Explorer (file://) kann JSmol aus Sicherheitsgründen des Browsers nicht laden.<br>" +
        "Bitte <code>start-lokal.bat</code> im Projektordner doppelklicken – sie startet einen lokalen " +
        "Mini-Server und öffnet das Tool im Browser. Oder die Version auf dem Webserver verwenden.");
-} else if (!molfile || molfile.indexOf("V2000") < 0) {
+} else if (!molfile || !payloadOk) {
   fail("Kein Molekül übergeben.<br>Diese Seite wird über den Button „🧊 3D-Modell“ im ChEdit-Formeleditor geöffnet.");
 } else {
   resolveJsmolBase().then(base => {
@@ -123,6 +149,16 @@ if (location.protocol === "file:") {
     s.onload = () => {
       try {
         Jmol.setDocument(0);
+        // XYZ-Frames (Mechanismus-Schema): keine Minimierung, ggf. Animation.
+        // MOL (Standard): Kraftfeld-Minimierung, Overlay bis "done".
+        // Achtung: "set minimizationRefresh false" würde die Minimierung in JSmol komplett anhalten!
+        const loadScript = isXyz
+          ? 'set antialiasDisplay ON; set frank OFF;' +
+            ' load DATA "m"\n' + molfile + 'END "m"; center; zoom 0; rotate y 90;' +
+            (isAnim ? ' animation fps 6; animation mode palindrome; frame 1; animation play;' : '')
+          : 'set antialiasDisplay ON; set frank OFF;' +
+            ' load DATA "mol"\n' + molfile + 'END "mol";' +
+            ' minimize steps 500;';
         applet = Jmol.getApplet("chedit3d", {
           use: "HTML5",
           width: "100%",
@@ -131,17 +167,13 @@ if (location.protocol === "file:") {
           serverURL: base + "/php/jsmol.php",
           disableInitialConsole: true,
           minimizationCallback: "cheditMinDone",
-          // Das Overlay verdeckt die Ansicht, bis die Minimierung fertig ist ("Endprodukt" direkt sichtbar).
-          // Achtung: "set minimizationRefresh false" würde die Minimierung in JSmol komplett anhalten!
-          script: 'set antialiasDisplay ON; set frank OFF;' +
-                  ' load DATA "mol"\n' + molfile + 'END "mol";' +
-                  ' minimize steps 500;'
+          script: loadScript
         });
         document.getElementById("viewer").innerHTML =
           Jmol.getAppletHtml(applet) +
-          '<div id="optimiere">Geometrie wird optimiert …</div>';
-        // Sicherheitsnetz: spätestens nach 8 s anzeigen (falls der Callback ausbleibt)
-        setTimeout(finishModel, 8000);
+          (isXyz ? "" : '<div id="optimiere">Geometrie wird optimiert …</div>');
+        // Sicherheitsnetz: spätestens nach 8 s (XYZ: 3 s) freigeben
+        setTimeout(finishModel, isXyz ? 3000 : 8000);
       } catch (e) {
         fail("JSmol-Fehler: " + String(e.message || e));
       }

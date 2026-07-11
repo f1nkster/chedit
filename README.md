@@ -53,6 +53,16 @@ ChEdit-Logos liegt unter `assets/logo-chedit.svg` (z. B. für Favicon oder Druck
   Druckseite/PDF ausgeben – mit Name/Klasse/Datum-Kopfzeile. Optionaler **Lückenmodus**
   lässt die Koeffizienten frei (`____ CH4 + ____ O2 → …`) und hängt auf Wunsch ein
   Lösungsblatt auf eigener Seite an.
+- **Reaktionsmechanismen**: Eigener Modus mit kuratierten, lehrplanrelevanten
+  Mechanismen (SN1 und SN2). Substrat (Methyl/primär/sekundär/tertiär) und Nucleophil
+  (OH⁻, H₂O, I⁻) wählbar; die Schritte werden mit **Elektronenverschiebungspfeilen**,
+  δ-Partialladungen und Übergangszustand (Klammern + ‡) gezeichnet und lassen sich
+  durchblättern, exportieren und ins Arbeitsblatt übernehmen. Eine **begründete
+  SN1/SN2-Abwägung** erklärt, welcher Mechanismus für die Kombination zu erwarten ist.
+  Dazu 3D: eine schematische **JSmol-Animation des Rückseitenangriffs** (CH₃Br) bzw.
+  das **planare tert-Butyl-Kation**. Teilbare Links: `?mode=mech&m=sn2&sub=mebr&nu=oh&schritt=2`.
+- **3D-Viewer-Bedienung**: Umschalter **Kugel–Stab/Kalotten** und ein **Messmodus**
+  (Abstände durch Anklicken zweier Atome) direkt in der 3D-Ansicht.
 - **3D-Modelle (JSmol)**: Im Strukturmodus öffnet „🧊 3D-Modell“ die mitgelieferte
   Viewer-Seite `3d.html` in einem **Popup-Fenster** (MOL-Datei wird per URL übergeben;
   erneute Klicks nutzen dasselbe Fenster). Die Geometrie wird von JSmol per Kraftfeld
