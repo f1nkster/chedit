@@ -318,9 +318,10 @@
     Ionen/Ladungen in eckigen Klammern: <code>[NH4+]</code>, <code>[O-]</code>, <code>CC(=O)[O-]</code> (Acetat) ·
     getrennte Teilchen mit <code>.</code> (<code>[Na+].[Cl-]</code>) · mehrere/verwachsene Ringe und Fragmente
     werden als 3D-Modell statt 2D dargestellt.
-    <br><strong>Mechanismen:</strong> SN1/SN2 Schritt für Schritt mit Elektronenverschiebungspfeilen,
-    wählbarem Substrat und Nucleophil, begründeter SN1/SN2-Abwägung und 3D-Ansicht
-    (SN2-Animation bzw. planares Carbenium-Ion).
+    <br><strong>Mechanismen:</strong> SN1/SN2 und radikalische Substitution (SR) Schritt für Schritt mit
+    Elektronenverschiebungspfeilen (volle Spitze = Elektronenpaar, Fischhaken = einzelnes Elektron),
+    Radikal-Punkten, begründeter SN1/SN2-Abwägung und 3D-Ansicht (SN2-Animation, planares Carbenium-Ion,
+    Cl₂-Homolyse).
     <p class="made">
       Open Source (MIT) ·
       <a href="https://github.com/f1nkster/chedit" target="_blank" rel="noopener">Quellcode auf GitHub</a> ·
@@ -1536,6 +1537,7 @@ function createSvgTarget() {
   const tf = { s: 1, tx: 0, ty: 0 };
   const stack = [];
   let path = [];
+  let circle = null;
   const X = x => (x * tf.s + tf.tx).toFixed(2);
   const Y = y => (y * tf.s + tf.ty).toFixed(2);
   const esc = v => String(v).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -1560,16 +1562,18 @@ function createSvgTarget() {
       const f = fontParts();
       els.push(`<text x="${X(x)}" y="${Y(y)}" font-family="${esc(f.family)}" font-size="${(f.size * tf.s).toFixed(2)}" fill="${esc(state.fillStyle)}">${esc(t)}</text>`);
     },
-    beginPath() { path = []; },
+    beginPath() { path = []; circle = null; },
     moveTo(x, y) { path.push(`M ${X(x)} ${Y(y)}`); },
     lineTo(x, y) { path.push(`L ${X(x)} ${Y(y)}`); },
     quadraticCurveTo(cx, cy, x, y) { path.push(`Q ${X(cx)} ${Y(cy)} ${X(x)} ${Y(y)}`); },
+    arc(x, y, r) { circle = { x, y, r }; },
     closePath() { path.push("Z"); },
     stroke() {
       if (path.length) els.push(`<path d="${path.join(" ")}" stroke="${esc(state.strokeStyle)}" stroke-width="${(state.lineWidth * tf.s).toFixed(2)}" stroke-linecap="${esc(state.lineCap)}"` +
         (state.dash ? ` stroke-dasharray="${state.dash}"` : "") + ` fill="none"/>`);
     },
     fill() {
+      if (circle) { els.push(`<circle cx="${X(circle.x)}" cy="${Y(circle.y)}" r="${(circle.r * tf.s).toFixed(2)}" fill="${esc(state.fillStyle)}"/>`); circle = null; return; }
       if (path.length) els.push(`<path d="${path.join(" ")}" fill="${esc(state.fillStyle)}" stroke="none"/>`);
     },
     setLineDash(arr) { state.dash = arr && arr.length ? arr.map(v => (v * tf.s).toFixed(2)).join(",") : null; },
@@ -1599,7 +1603,8 @@ function createSvgTarget() {
 /* ================== Reaktionsmechanismen (kuratierte Bibliothek) ================== */
 const MECH_TYPES = [
   ["sn2", "Nukleophile Substitution – SN2"],
-  ["sn1", "Nukleophile Substitution – SN1"]
+  ["sn1", "Nukleophile Substitution – SN1"],
+  ["sr", "Radikalische Substitution – SR (Methan + Cl₂)"]
 ];
 const MECH_SUBSTRATES = {
   mebr: { label: "Brommethan CH₃Br (Methyl)", smiles: "CBr", cat: "[CH3+]", klass: "Methyl", subs: ["H", "H", "H"] },
@@ -1643,8 +1648,65 @@ function mechAssessment(subKey, nuKey) {
   return { empfohlen: emp, gruende: g };
 }
 
+// Radikalische Substitution: Photochlorierung von Methan (Kettenreaktion mit Fischhaken-Pfeilen)
+function buildRadicalSteps() {
+  const cl2 = () => ({ kind: "mol", id: "cl2", input: "ClCl", lonePairs: true });
+  return [
+    {
+      title: "Kettenstart (Homolyse)",
+      text: "UV-Licht oder Hitze spaltet das Chlor-Molekül homolytisch: Jedes Chlor-Atom nimmt genau ein Elektron mit. Die Fischhaken-Pfeile (halbe Spitze) zeigen die Bewegung einzelner Elektronen – es entstehen zwei Chlor-Radikale.",
+      anim3d: "cl2",
+      scene: {
+        items: [cl2()],
+        curves: [
+          { from: { id: "cl2", bond: ["i:0", "i:1"] }, to: { id: "cl2", sel: "i:0", dx: -1.6, dy: -0.6 }, bend: -1.7, single: true },
+          { from: { id: "cl2", bond: ["i:0", "i:1"] }, to: { id: "cl2", sel: "i:1", dx: 1.6, dy: -0.6 }, bend: 1.7, single: true }
+        ],
+        labels: [], dots: []
+      }
+    },
+    {
+      title: "Kettenfortpflanzung 1: H-Abstraktion",
+      text: "Ein Chlor-Radikal reißt ein Wasserstoff-Atom aus dem Methan heraus. Aus der C–H-Bindung geht ein Elektron in die neue H–Cl-Bindung, das andere bleibt am Kohlenstoff. Es entstehen Chlorwasserstoff und ein Methyl-Radikal CH₃•.",
+      scene: {
+        items: [{ kind: "mol", id: "cl", input: "[Cl]" }, { kind: "gap" }, { kind: "mol", id: "m", input: "C" }],
+        curves: [
+          { from: { id: "cl", sel: "i:0" }, to: { id: "m", sel: "i:0", dx: -1.3 }, bend: -1.0, single: true },
+          { from: { id: "m", sel: "i:0", dx: -1.3, dy: 0.2 }, to: { id: "m", sel: "i:0" }, bend: 1.1, single: true }
+        ],
+        labels: [], dots: [{ id: "cl", sel: "i:0" }]
+      }
+    },
+    {
+      title: "Kettenfortpflanzung 2: Cl-Übertragung",
+      text: "Das Methyl-Radikal greift ein Chlor-Molekül an: Ein Elektron bildet mit einem Cl-Elektron die neue C–Cl-Bindung, das zweite Cl-Elektron bleibt als neues Chlor-Radikal übrig. Es entsteht Chlormethan – und die Kette läuft weiter.",
+      scene: {
+        items: [{ kind: "mol", id: "me", input: "[CH3]" }, { kind: "gap" }, cl2()],
+        curves: [
+          { from: { id: "me", sel: "i:0" }, to: { id: "cl2", sel: "i:0", dx: -0.9 }, bend: -1.0, single: true },
+          { from: { id: "cl2", bond: ["i:0", "i:1"] }, to: { id: "cl2", sel: "i:1" }, bend: 1.1, single: true }
+        ],
+        labels: [], dots: [{ id: "me", sel: "i:0" }]
+      }
+    },
+    {
+      title: "Kettenabbruch",
+      text: "Treffen zwei Radikale aufeinander, verbinden sie ihre einzelnen Elektronen zu einer neuen Bindung – die Kette endet. Hier: CH₃• + Cl• → CH₃Cl. Ebenso möglich: 2 CH₃• → Ethan oder 2 Cl• → Cl₂.",
+      scene: {
+        items: [{ kind: "mol", id: "me", input: "[CH3]" }, { kind: "gap" }, { kind: "mol", id: "cl", input: "[Cl]" }],
+        curves: [
+          { from: { id: "me", sel: "i:0" }, to: { id: "me", sel: "i:0", dx: 2.3 }, bend: -0.8, single: true },
+          { from: { id: "cl", sel: "i:0" }, to: { id: "cl", sel: "i:0", dx: -2.3 }, bend: 0.8, single: true }
+        ],
+        labels: [], dots: [{ id: "me", sel: "i:0" }, { id: "cl", sel: "i:0" }]
+      }
+    }
+  ];
+}
+
 // Schrittfolgen: jede Szene beschreibt Moleküle, Elektronenpfeile und δ-Labels
 function buildMechSteps(mech, subKey, nuKey) {
+  if (mech === "sr") return buildRadicalSteps();
   const sub = MECH_SUBSTRATES[subKey], nu = MECH_NUCLEOPHILES[nuKey];
   const nuItem = { kind: "mol", id: "nu", input: nu.smiles, lonePairs: true };
   const subItem = { kind: "mol", id: "sub", input: sub.smiles, lonePairs: true };
@@ -1725,7 +1787,8 @@ function buildMechSteps(mech, subKey, nuKey) {
 }
 
 /* ---------- Zeichnen der Mechanismus-Szenen ---------- */
-function drawCurvedArrow(ctx, p1, p2, bend, color, fs) {
+// single=true -> Fischhaken (halbe Pfeilspitze) für die Verschiebung nur eines Elektrons
+function drawCurvedArrow(ctx, p1, p2, bend, color, fs, single) {
   const mx = (p1[0] + p2[0]) / 2, my = (p1[1] + p2[1]) / 2;
   const dx = p2[0] - p1[0], dy = p2[1] - p1[1], len = Math.hypot(dx, dy) || 1;
   const nx = -dy / len, ny = dx / len;
@@ -1735,12 +1798,22 @@ function drawCurvedArrow(ctx, p1, p2, bend, color, fs) {
   ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.quadraticCurveTo(cx, cy, p2[0], p2[1]); ctx.stroke();
   // Pfeilspitze in Tangentenrichtung
   const tx = p2[0] - cx, ty = p2[1] - cy, tl = Math.hypot(tx, ty) || 1, ux = tx / tl, uy = ty / tl;
-  const s = fs * 0.45, px = -uy, py = ux;
-  ctx.beginPath();
-  ctx.moveTo(p2[0], p2[1]);
-  ctx.lineTo(p2[0] - ux * s + px * s * 0.5, p2[1] - uy * s + py * s * 0.5);
-  ctx.lineTo(p2[0] - ux * s - px * s * 0.5, p2[1] - uy * s - py * s * 0.5);
-  ctx.closePath(); ctx.fill();
+  const s = fs * 0.5, px = -uy, py = ux;
+  const side = bend >= 0 ? 1 : -1; // Barbe auf die Außenseite der Krümmung legen
+  if (single) {
+    // nur eine Barbe (ein Elektron), als Linie – nicht gefüllt
+    ctx.beginPath();
+    ctx.moveTo(p2[0], p2[1]);
+    ctx.lineTo(p2[0] - ux * s + px * s * 0.75 * side, p2[1] - uy * s + py * s * 0.75 * side);
+    ctx.stroke();
+  } else {
+    // volle Spitze (Elektronenpaar)
+    ctx.beginPath();
+    ctx.moveTo(p2[0], p2[1]);
+    ctx.lineTo(p2[0] - ux * s + px * s * 0.5, p2[1] - uy * s + py * s * 0.5);
+    ctx.lineTo(p2[0] - ux * s - px * s * 0.5, p2[1] - uy * s - py * s * 0.5);
+    ctx.closePath(); ctx.fill();
+  }
 }
 
 function measureTs(ctx, data, fs, fontN, fontS) {
@@ -1870,6 +1943,8 @@ function renderMechScene(target, scene, opts) {
   // Anker auflösen
   function atomIndexBySel(entry, sel) {
     const mol = entry.mol;
+    if (typeof sel === "string" && sel.indexOf("i:") === 0) return parseInt(sel.slice(2), 10);
+    if (typeof sel === "string" && sel.indexOf("el:") === 0) return mol.atoms.findIndex(a2 => a2.el === sel.slice(3));
     if (sel === "br") return mol.atoms.findIndex(a2 => a2.el === "Br");
     if (sel === "brC") {
       const br = mol.atoms.findIndex(a2 => a2.el === "Br");
@@ -1914,8 +1989,34 @@ function renderMechScene(target, scene, opts) {
     // Scheitelpunkt des Bogens ebenfalls meiden
     const nx = -u[1], ny = u[0], bend = (c.bend || 1) * fs;
     curvePts.push(q1, q2, [(q1[0] + q2[0]) / 2 + nx * bend * 0.5, (q1[1] + q2[1]) / 2 + ny * bend * 0.5]);
-    drawCurvedArrow(ctx, q1, q2, bend, "#b91c1c", fs);
+    drawCurvedArrow(ctx, q1, q2, bend, "#b91c1c", fs, c.single);
   }
+
+  // freie Richtung an einem Atom finden (Bindungen, H, Elektronenpaare und Pfeile meiden)
+  function freeAngleAt(e, idx) {
+    const p = e.render.atoms[idx];
+    const abs = [p[0] + e.origin[0], p[1] + e.origin[1]];
+    const taken = [];
+    e.mol.bonds.forEach(b => {
+      const o = b.a === idx ? b.b : (b.b === idx ? b.a : -1);
+      if (o >= 0) { const q = e.render.atoms[o]; taken.push(Math.atan2(q[1] - p[1], q[0] - p[0])); }
+    });
+    [...(e.render.hs || []), ...(e.render.lps || [])].forEach(q => {
+      if (q[2] === idx) taken.push(Math.atan2(q[1] - p[1], q[0] - p[0]));
+    });
+    curvePts.forEach(q => {
+      if (Math.hypot(q[0] - abs[0], q[1] - abs[1]) < fs * 2.4) taken.push(Math.atan2(q[1] - abs[1], q[0] - abs[0]));
+    });
+    let best = -Math.PI / 2, bs = -1;
+    for (let c2 = 0; c2 < 12; c2++) {
+      const ang = c2 * Math.PI / 6;
+      let mind = 7;
+      taken.forEach(t => { let d2 = Math.abs(ang - t) % (2 * Math.PI); if (d2 > Math.PI) d2 = 2 * Math.PI - d2; mind = Math.min(mind, d2); });
+      if (mind > bs + 1e-9) { bs = mind; best = ang; }
+    }
+    return { best, abs };
+  }
+
   ctx.fillStyle = "#111111";
   ctx.font = "italic " + fontS;
   for (const lb of (scene.labels || [])) {
@@ -1924,31 +2025,23 @@ function renderMechScene(target, scene, opts) {
     const p = e.render.atoms[idx];
     let dx = lb.dx, dy = lb.dy;
     if (dx === undefined && dy === undefined) {
-      // freie Richtung am Atom suchen (Bindungen, H-Knoten und Elektronenpaare meiden)
-      const taken = [];
-      e.mol.bonds.forEach(b => {
-        const o = b.a === idx ? b.b : (b.b === idx ? b.a : -1);
-        if (o >= 0) { const q = e.render.atoms[o]; taken.push(Math.atan2(q[1] - p[1], q[0] - p[0])); }
-      });
-      [...(e.render.hs || []), ...(e.render.lps || [])].forEach(q => {
-        if (q[2] === idx) taken.push(Math.atan2(q[1] - p[1], q[0] - p[0]));
-      });
-      // Pfeil-Punkte in der Nähe meiden
-      const abs = [p[0] + e.origin[0], p[1] + e.origin[1]];
-      curvePts.forEach(q => {
-        if (Math.hypot(q[0] - abs[0], q[1] - abs[1]) < fs * 2.4) taken.push(Math.atan2(q[1] - abs[1], q[0] - abs[0]));
-      });
-      let best = -Math.PI / 2, bs = -1;
-      for (let c2 = 0; c2 < 12; c2++) {
-        const ang = c2 * Math.PI / 6;
-        let mind = 7;
-        taken.forEach(t => { let d2 = Math.abs(ang - t) % (2 * Math.PI); if (d2 > Math.PI) d2 = 2 * Math.PI - d2; mind = Math.min(mind, d2); });
-        if (mind > bs + 1e-9) { bs = mind; best = ang; }
-      }
+      const { best } = freeAngleAt(e, idx);
       dx = Math.cos(best) * 1.5;
       dy = Math.sin(best) * 1.5 + 0.3; // Baseline-Ausgleich
     }
     ctx.fillText(lb.text, p[0] + e.origin[0] + dx * fs - fs * 0.3, p[1] + e.origin[1] + dy * fs);
+  }
+
+  // Radikal-Punkte (einzelne, ungepaarte Elektronen) als gefüllte Punkte
+  ctx.fillStyle = "#111111";
+  for (const rd of (scene.dots || [])) {
+    const e = byId[rd.id];
+    const idx = atomIndexBySel(e, rd.sel);
+    const { best, abs } = freeAngleAt(e, idx);
+    const r = fs * 0.85;
+    ctx.beginPath();
+    ctx.arc(abs[0] + Math.cos(best) * r, abs[1] + Math.sin(best) * r, fs * 0.13, 0, 2 * Math.PI);
+    ctx.fill();
   }
   return { w: W, h: H };
 }
@@ -2002,6 +2095,19 @@ function carbeniumTertXyz() {
   }
   return atoms.length + "\ntert-Butyl-Kation (planar, Schema)\n" +
     atoms.map(a => a[0] + "  " + a[1].toFixed(3) + "  " + a[2].toFixed(3) + "  " + a[3].toFixed(3)).join("\n");
+}
+
+// Homolyse von Cl2: die beiden Cl-Atome bewegen sich auseinander (schematisch)
+function cl2HomolysisXyz() {
+  const N = 16, frames = [];
+  for (let f = 0; f < N; f++) {
+    const t = f / (N - 1);
+    const d = 1.99 + t * 3.0;
+    frames.push("2\nCl2-Homolyse t=" + t.toFixed(2) +
+      "\nCl  " + (-d / 2).toFixed(3) + "  0.000  0.000" +
+      "\nCl  " + (d / 2).toFixed(3) + "  0.000  0.000");
+  }
+  return frames.join("\n");
 }
 
 /* ---------- UI ---------- */
@@ -2151,6 +2257,9 @@ epCb.addEventListener("change", update);
 
 function renderMech() {
   const m = mechTypeSel.value, s = mechSubSel.value, nuK = mechNuSel.value;
+  const isRadical = m === "sr";
+  // Substrat/Nucleophil-Auswahl nur bei der nukleophilen Substitution zeigen
+  mechSubSel.hidden = mechNuSel.hidden = isRadical;
   const steps = buildMechSteps(m, s, nuK);
   if (mechStep > steps.length - 1) mechStep = steps.length - 1;
   if (mechStep < 0) mechStep = 0;
@@ -2158,23 +2267,28 @@ function renderMech() {
   $("mechStepLabel").textContent = `Schritt ${mechStep + 1}/${steps.length}`;
   $("mechPrev").disabled = mechStep === 0;
   $("mechNext").disabled = mechStep === steps.length - 1;
-  const a = mechAssessment(s, nuK);
-  const mismatch = a.empfohlen !== m;
-  feedback.innerHTML =
-    `<div><b>${escapeHtml(st.title)}:</b> ${escapeHtml(st.text)}</div>` +
-    `<div class="mech-box${mismatch ? " warn" : ""}"><b>Abwägung SN1/SN2:</b> ${a.gruende.map(escapeHtml).join(" · ")}.` +
-    (mismatch
-      ? `<br><b>Hinweis:</b> Für diese Kombination ist eher <b>${a.empfohlen.toUpperCase()}</b> zu erwarten – dargestellt wird der gewählte ${m.toUpperCase()}-Mechanismus.`
-      : ` → <b>${m.toUpperCase()}</b> ist hier der passende Mechanismus.`) +
-    `</div>`;
+  let boxHtml;
+  if (isRadical) {
+    boxHtml = `<div class="mech-box"><b>Radikalkettenreaktion:</b> Kettenstart, -fortpflanzung und -abbruch. ` +
+      `Die <b>Fischhaken-Pfeile</b> (halbe Spitze) stehen für die Bewegung <b>einzelner</b> Elektronen, ` +
+      `die vollen Pfeile in den anderen Mechanismen für Elektronen<b>paare</b>.</div>`;
+  } else {
+    const a = mechAssessment(s, nuK);
+    const mismatch = a.empfohlen !== m;
+    boxHtml = `<div class="mech-box${mismatch ? " warn" : ""}"><b>Abwägung SN1/SN2:</b> ${a.gruende.map(escapeHtml).join(" · ")}.` +
+      (mismatch
+        ? `<br><b>Hinweis:</b> Für diese Kombination ist eher <b>${a.empfohlen.toUpperCase()}</b> zu erwarten – dargestellt wird der gewählte ${m.toUpperCase()}-Mechanismus.`
+        : ` → <b>${m.toUpperCase()}</b> ist hier der passende Mechanismus.`) + `</div>`;
+  }
+  feedback.innerHTML = `<div><b>${escapeHtml(st.title)}:</b> ${escapeHtml(st.text)}</div>` + boxHtml;
   showPreview(
     (cv, o) => renderMechScene(cv, st.scene, { fontSize: parseInt(sizeRange.value, 10), fontFamily: fontSel.value, scale: o.scale, background: o.background }),
     `${m.toUpperCase()}, Schritt ${mechStep + 1} von ${steps.length}: ${st.title}. ${st.text}`
   );
-  // 3D: SN2-Animation für CH3Br, planares Carbenium-Ion für tertiäres Substrat
-  const can3d = (m === "sn2" && s === "mebr") || (m === "sn1" && s === "tert");
+  // 3D: SN2-Animation (CH3Br), planares Carbenium-Ion (tertiär), Cl2-Homolyse (SR-Kettenstart)
+  const can3d = (m === "sn2" && s === "mebr") || (m === "sn1" && s === "tert") || (isRadical && st.anim3d === "cl2");
   $("mechAnim3d").disabled = !can3d;
-  $("mechAnim3d").title = can3d ? "" : "3D-Ansicht derzeit für Brommethan (SN2-Animation) bzw. tertiäres Substrat (planares Carbenium-Ion)";
+  $("mechAnim3d").title = can3d ? "" : "3D-Ansicht für diesen Schritt nicht verfügbar";
 }
 [mechTypeSel, mechSubSel, mechNuSel].forEach(sel =>
   sel.addEventListener("change", () => { mechStep = 0; renderMech(); }));
@@ -2184,6 +2298,7 @@ $("mechAnim3d").addEventListener("click", () => {
   const m = mechTypeSel.value, s = mechSubSel.value;
   if (m === "sn2" && s === "mebr") openViewer(sn2AnimXyz(mechNuSel.value), "typ=xyz&anim=1");
   else if (m === "sn1" && s === "tert") openViewer(carbeniumTertXyz(), "typ=xyz");
+  else if (m === "sr") openViewer(cl2HomolysisXyz(), "typ=xyz&anim=1");
 });
 
 examplesSel.addEventListener("change", e => {

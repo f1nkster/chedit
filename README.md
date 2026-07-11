@@ -54,13 +54,16 @@ ChEdit-Logos liegt unter `assets/logo-chedit.svg` (z. B. für Favicon oder Druck
   lässt die Koeffizienten frei (`____ CH4 + ____ O2 → …`) und hängt auf Wunsch ein
   Lösungsblatt auf eigener Seite an.
 - **Reaktionsmechanismen**: Eigener Modus mit kuratierten, lehrplanrelevanten
-  Mechanismen (SN1 und SN2). Substrat (Methyl/primär/sekundär/tertiär) und Nucleophil
-  (OH⁻, H₂O, I⁻) wählbar; die Schritte werden mit **Elektronenverschiebungspfeilen**,
-  δ-Partialladungen und Übergangszustand (Klammern + ‡) gezeichnet und lassen sich
-  durchblättern, exportieren und ins Arbeitsblatt übernehmen. Eine **begründete
+  Mechanismen: **SN1**, **SN2** und **radikalische Substitution (SR)** (Photochlorierung
+  von Methan). Bei den nukleophilen Substitutionen sind Substrat (Methyl/primär/sekundär/
+  tertiär) und Nucleophil (OH⁻, H₂O, I⁻) wählbar. Die Schritte werden mit
+  **Elektronenverschiebungspfeilen** gezeichnet – volle Pfeilspitze für Elektronen**paare**,
+  **Fischhaken (halbe Spitze)** für die Bewegung **einzelner** Elektronen inkl.
+  **Radikal-Punkten** –, dazu δ-Partialladungen und Übergangszustand (Klammern + ‡). Alles
+  lässt sich durchblättern, exportieren und ins Arbeitsblatt übernehmen. Eine **begründete
   SN1/SN2-Abwägung** erklärt, welcher Mechanismus für die Kombination zu erwarten ist.
-  Dazu 3D: eine schematische **JSmol-Animation des Rückseitenangriffs** (CH₃Br) bzw.
-  das **planare tert-Butyl-Kation**. Teilbare Links: `?mode=mech&m=sn2&sub=mebr&nu=oh&schritt=2`.
+  Dazu 3D: schematische **JSmol-Animationen** (Rückseitenangriff an CH₃Br, Cl₂-Homolyse)
+  und das **planare tert-Butyl-Kation**. Teilbare Links: `?mode=mech&m=sn2&sub=mebr&nu=oh&schritt=2`.
 - **3D-Viewer-Bedienung**: Umschalter **Kugel–Stab/Kalotten** und ein **Messmodus**
   (Abstände durch Anklicken zweier Atome) direkt in der 3D-Ansicht.
 - **3D-Modelle (JSmol)**: Im Strukturmodus öffnet „🧊 3D-Modell“ die mitgelieferte
