@@ -7,7 +7,7 @@ Arbeitsblatt-Generator. Kernstück ist [index.html](index.html) plus der Ordner
 `assets/` (Logo und Schrift) – keine Installation, keine Abhängigkeiten,
 kein Server nötig.
 
-![ChEdit – eine Reaktionsgleichung wird automatisch ausgeglichen](docs/screenshot.png)
+![ChEdit – eine Reaktionsgleichung wird automatisch ausgeglichen; darüber die 13 Modi in fünf Gruppen von Atombau bis Mechanismen](docs/screenshot.png)
 
 Das Design folgt dem **FAU-Corporate-Design** (FAU-Blau `#04316a`, Phil-Fak-Gelb `#fdb735`)
 und passt damit optisch zu https://www.chemiedidaktik.phil.fau.de/. Im Header steht links
