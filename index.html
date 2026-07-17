@@ -176,12 +176,15 @@
   .stoich-reset:hover { background: var(--fau-blau-hell); }
   /* pH-Rechner (Säuren & Basen) und Titration */
   #phOptions select, #phOptions input, #titrOptions select, #titrOptions input, #atomOptions select,
-  #galvOptions select, #galvOptions input, #reiheOptions select {
+  #galvOptions select, #galvOptions input, #reiheOptions select, #labOptions select, #labOptions input {
     font: inherit; font-size: .95rem; padding: 8px 10px;
     border: 1px solid var(--muted); background: var(--card); color: var(--ink);
   }
-  #galvFaradayWrap { display: inline-flex; align-items: center; gap: 10px; }
-  #galvFaradayWrap[hidden] { display: none; }
+  #galvFaradayWrap, #labAnsetzenWrap, #labVerdWrap, #labUmrWrap { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #galvFaradayWrap[hidden], #labAnsetzenWrap[hidden], #labVerdWrap[hidden], #labUmrWrap[hidden] { display: none; }
+  #labOptions .opt-label { display: inline-flex; align-items: center; gap: 6px; }
+  #labOptions input { width: 6.5em; text-align: right; }
+  #labFormel, #labUFormel { width: 8.5em !important; text-align: left !important; }
   /* Mini-PSE (Atombau): klickbares Raster H–Kr */
   .pse-grid {
     display: grid; grid-template-columns: repeat(18, minmax(1.3em, 1fr));
@@ -326,6 +329,7 @@
       <div class="mode-switch">
         <button id="modePh" type="button" title="pH-Werte berechnen (Säuren &amp; Basen)">Säuren &amp; Basen</button>
         <button id="modeTitr" type="button" title="Interaktive Titration mit Titrationskurve">Titration</button>
+        <button id="modeLab" type="button" title="Laborrechner: Lösungen ansetzen, verdünnen, Konzentrationen umrechnen">Lab-Tools</button>
       </div>
     </div>
     <div class="mode-group">
@@ -471,6 +475,30 @@
       <select id="reiheIon" aria-label="Ionenlösung wählen"></select>
     </label>
     <button id="reiheSwap" type="button" title="Metall und Lösung vertauschen">⇄ tauschen</button>
+  </div>
+
+  <div class="input-row" id="labOptions" hidden>
+    <div class="mode-switch">
+      <button id="labToolAnsetzen" class="active" type="button" title="Wie viel Substanz für eine Lösung gegebener Konzentration abwiegen?">Lösung ansetzen</button>
+      <button id="labToolVerd" type="button" title="Stammlösung auf eine Zielkonzentration verdünnen (c₁·V₁ = c₂·V₂)">Verdünnen</button>
+      <button id="labToolUmr" type="button" title="Massenanteil und Dichte in Stoffmengenkonzentration umrechnen">w% → c</button>
+    </div>
+    <span id="labAnsetzenWrap">
+      <label class="opt-label">Stoff: <input id="labFormel" type="text" value="NaOH" spellcheck="false" aria-label="Summenformel des Stoffs"></label>
+      <label class="opt-label">c = <input id="labC" type="text" inputmode="decimal" value="0,1" aria-label="Zielkonzentration in Mol pro Liter"> mol/L</label>
+      <label class="opt-label">V = <input id="labV" type="text" inputmode="decimal" value="250" aria-label="Zielvolumen in Milliliter"> mL</label>
+    </span>
+    <span id="labVerdWrap" hidden>
+      <label class="opt-label">c₁ = <input id="labC1" type="text" inputmode="decimal" value="1" aria-label="Konzentration der Stammlösung in Mol pro Liter"> mol/L</label>
+      <label class="opt-label">c₂ = <input id="labC2" type="text" inputmode="decimal" value="0,1" aria-label="Zielkonzentration in Mol pro Liter"> mol/L</label>
+      <label class="opt-label">V₂ = <input id="labV2" type="text" inputmode="decimal" value="100" aria-label="Zielvolumen in Milliliter"> mL</label>
+    </span>
+    <span id="labUmrWrap" hidden>
+      <select id="labStock" aria-label="Handelsübliche Lösung wählen"></select>
+      <label class="opt-label">Stoff: <input id="labUFormel" type="text" value="HCl" spellcheck="false" aria-label="Summenformel des gelösten Stoffs"></label>
+      <label class="opt-label">w = <input id="labW" type="text" inputmode="decimal" value="37" aria-label="Massenanteil in Prozent"> %</label>
+      <label class="opt-label">ρ = <input id="labRho" type="text" inputmode="decimal" value="1,19" aria-label="Dichte in Gramm pro Milliliter"> g/mL</label>
+    </span>
   </div>
 
   <div id="feedback" aria-live="polite"></div>
@@ -2985,7 +3013,7 @@ const epCb = $("epPairs");
 const sheetSection = $("sheetSection"), sheetList = $("sheetList"), sheetCount = $("sheetCount"), sheetTitleIn = $("sheetTitle");
 const sheetTaskSel = $("sheetTask"), solCb = $("withSolution");
 const fontSel = $("font"), sizeRange = $("size"), sizeVal = $("sizeVal"), transparentCb = $("transparent");
-const modeAutoBtn = $("modeAuto"), modeCheckBtn = $("modeCheck"), modeStoichBtn = $("modeStoich"), modeOxBtn = $("modeOx"), modePhBtn = $("modePh"), modeTitrBtn = $("modeTitr"), modeAtomBtn = $("modeAtom"), modeGalvBtn = $("modeGalv"), modeReiheBtn = $("modeReihe"), modeStructBtn = $("modeStruct"), modeLatticeBtn = $("modeLattice"), modeMechBtn = $("modeMech"), modeHint = $("modeHint");
+const modeAutoBtn = $("modeAuto"), modeCheckBtn = $("modeCheck"), modeStoichBtn = $("modeStoich"), modeOxBtn = $("modeOx"), modePhBtn = $("modePh"), modeTitrBtn = $("modeTitr"), modeLabBtn = $("modeLab"), modeAtomBtn = $("modeAtom"), modeGalvBtn = $("modeGalv"), modeReiheBtn = $("modeReihe"), modeStructBtn = $("modeStruct"), modeLatticeBtn = $("modeLattice"), modeMechBtn = $("modeMech"), modeHint = $("modeHint");
 const latticeSel = $("latticeSel");
 const styleSkeletonBtn = $("styleSkeleton"), styleFullBtn = $("styleFull"), structOptions = $("structOptions");
 const geoZigzagBtn = $("geoZigzag"), geoLinearBtn = $("geoLinear");
@@ -2993,7 +3021,7 @@ const examplesSel = $("examples");
 const inputRow = $("inputRow"), mechOptions = $("mechOptions"), mechNav = $("mechNav");
 const mechTypeSel = $("mechType"), mechSubSel = $("mechSub"), mechNuSel = $("mechNu");
 
-let mode = "auto";            // "auto" | "check" | "stoich" | "ox" | "ph" | "titr" | "atom" | "galv" | "reihe" | "struct" | "lattice" | "mech"
+let mode = "auto";            // "auto" | "check" | "stoich" | "ox" | "ph" | "titr" | "lab" | "atom" | "galv" | "reihe" | "struct" | "lattice" | "mech"
 let stoichData = null;        // aktuelle Stöchiometrie-Daten (Stoffe, Koeffizienten, molare Massen)
 let oxMilieuUser = null;      // Milieu im Oxidationszahlen-Modus: null = automatisch, "sauer" | "basisch"
 let phLogOpen = false;        // ist das Erklär-Panel „Logarithmische Skala“ aufgeklappt?
@@ -3013,6 +3041,7 @@ const HINTS = {
   atom: "Element (H bis Kr) und ggf. Ladung wählen – die Elektronenkonfiguration wird als Energiestufenmodell (Schalen) oder Orbitalmodell (Kästchenschreibweise mit Spin-Pfeilen) gezeigt, mit Konfigurations-Schreibweise, Edelgas-Kurzform und den Besetzungsregeln (Pauli-Prinzip, Hund'sche Regel, energetische Reihenfolge).",
   galv: "Zwei Halbzellen frei kombinieren (Metall + Salzlösung) – das Tool bestimmt Anode und Kathode aus den Standardpotenzialen, zeichnet die Zelle mit Salzbrücke, Elektronenfluss und Voltmeter und berechnet die Zellspannung (Nernst bei c ≠ 1 mol/L). Umschalter „Elektrolyse“: Eine Spannungsquelle erzwingt die Rückreaktion – die Pole wechseln, die Anode bleibt der Ort der Oxidation; mit Stromstärke und Zeit berechnet das Tool die abgeschiedene Masse (Faraday).",
   reihe: "Festes Metall und Ionenlösung wählen – die Spannungsreihe zeigt, ob die Redoxreaktion freiwillig abläuft (Zink in Kupfersulfat: ja; Kupfer in Zinksulfat: nein). Das unedlere Metall gibt Elektronen an die Ionen des edleren ab.",
+  lab: "Laborrechner für die Praxis: Lösung ansetzen (Stoff, Konzentration und Volumen → Einwaage, auch für Hydrate), Verdünnen (c₁·V₁ = c₂·V₂ → Volumen der Stammlösung und des Wassers) und Umrechnen von Massenanteil + Dichte in Stoffmengenkonzentration (z. B. konzentrierte Salzsäure 37 % → 12 mol/L) – jeweils mit Rechenweg und Arbeitsanleitung.",
   lattice: "Ionen- oder Metallgitter wählen und als 3D-Modell öffnen. Ein Gitterausschnitt wird als Kugelmodell gezeigt (drehbar, zoombar); Strukturtyp, Koordinationszahl und Beispiele stehen dabei. Die Elementarzelle ist als gelbe Box eingeblendet (im Viewer abschaltbar). Mit „Messen“ lassen sich im 3D-Modell Ionenabstände bestimmen.",
   struct: "Molekül als Halbstrukturformel (CH3-CH(CH3)-OH), SMILES (CCO) oder Name (Propan-2-ol, Essigsäure) eingeben – Darstellung als Skelettformel oder mit ausgeschriebenen C und H.",
   mech: "Lehrplan-Mechanismen Schritt für Schritt: Mechanismus, Substrat und Nucleophil wählen. Die SN1/SN2-Abwägung wird begründet; jeder Schritt lässt sich exportieren oder ins Arbeitsblatt übernehmen."
@@ -3088,18 +3117,19 @@ function fillExamples(kind) {
 
 function setMode(m) {
   mode = m;
-  [[modeAutoBtn, "auto"], [modeCheckBtn, "check"], [modeStoichBtn, "stoich"], [modeOxBtn, "ox"], [modePhBtn, "ph"], [modeTitrBtn, "titr"], [modeAtomBtn, "atom"], [modeGalvBtn, "galv"], [modeReiheBtn, "reihe"], [modeStructBtn, "struct"], [modeLatticeBtn, "lattice"], [modeMechBtn, "mech"]].forEach(([btn, v]) => {
+  [[modeAutoBtn, "auto"], [modeCheckBtn, "check"], [modeStoichBtn, "stoich"], [modeOxBtn, "ox"], [modePhBtn, "ph"], [modeTitrBtn, "titr"], [modeLabBtn, "lab"], [modeAtomBtn, "atom"], [modeGalvBtn, "galv"], [modeReiheBtn, "reihe"], [modeStructBtn, "struct"], [modeLatticeBtn, "lattice"], [modeMechBtn, "mech"]].forEach(([btn, v]) => {
     btn.classList.toggle("active", m === v);
     btn.setAttribute("aria-pressed", String(m === v));
   });
   structOptions.hidden = m !== "struct";
   $("view3d").hidden = m !== "struct";
-  inputRow.hidden = m === "mech" || m === "ph" || m === "titr" || m === "atom" || m === "galv" || m === "reihe" || m === "lattice";
+  inputRow.hidden = m === "mech" || m === "ph" || m === "titr" || m === "lab" || m === "atom" || m === "galv" || m === "reihe" || m === "lattice";
   mechOptions.hidden = m !== "mech";
   mechNav.hidden = m !== "mech";
   $("phOptions").hidden = m !== "ph";
   $("titrOptions").hidden = m !== "titr";
   $("titrRun").hidden = m !== "titr";
+  $("labOptions").hidden = m !== "lab";
   $("atomOptions").hidden = m !== "atom";
   $("galvOptions").hidden = m !== "galv";
   $("reiheOptions").hidden = m !== "reihe";
@@ -3115,6 +3145,7 @@ modeStoichBtn.addEventListener("click", () => setMode("stoich"));
 modeOxBtn.addEventListener("click", () => setMode("ox"));
 modePhBtn.addEventListener("click", () => setMode("ph"));
 modeTitrBtn.addEventListener("click", () => setMode("titr"));
+modeLabBtn.addEventListener("click", () => setMode("lab"));
 modeAtomBtn.addEventListener("click", () => setMode("atom"));
 modeGalvBtn.addEventListener("click", () => setMode("galv"));
 modeReiheBtn.addEventListener("click", () => setMode("reihe"));
@@ -3280,6 +3311,7 @@ function update() {
   if (mode === "mech") { renderMech(); return; }
   if (mode === "ph") { renderPHMode(); return; }
   if (mode === "titr") { renderTitrMode(); return; }
+  if (mode === "lab") { renderLabMode(); return; }
   if (mode === "atom") { renderAtomMode(); return; }
   if (mode === "galv") { renderGalvMode(); return; }
   if (mode === "reihe") { renderReiheMode(); return; }
@@ -4383,6 +4415,249 @@ $("titrToHalf").addEventListener("click", () => { if (titrCurrent) titrSetVol(ti
 $("titrToEq").addEventListener("click", () => { if (titrCurrent) titrSetVol(titrCurrent.veq); });
 $("titrReset").addEventListener("click", () => titrSetVol(0));
 
+/* ---------- Lab-Tools: Lösungen ansetzen, verdünnen, umrechnen ---------- */
+// Handelsübliche Konzentrate (Schulwerte): [Formel, Name, w in %, ρ in g/mL]
+const LAB_STOCK = [
+  ["HCl", "Salzsäure konz. (37 %)", 37, 1.19],
+  ["H2SO4", "Schwefelsäure konz. (96 %)", 96, 1.84],
+  ["HNO3", "Salpetersäure konz. (65 %)", 65, 1.40],
+  ["H3PO4", "Phosphorsäure (85 %)", 85, 1.69],
+  ["NH3", "Ammoniak-Lösung (25 %)", 25, 0.91],
+  ["NaOH", "Natronlauge (32 %)", 32, 1.35],
+  ["CH3COOH", "Essigsäure (Eisessig, 100 %)", 100, 1.05]
+];
+let labTool = "ansetzen"; // "ansetzen" | "verd" | "umr"
+const labFormelIn = $("labFormel"), labCIn = $("labC"), labVIn = $("labV");
+const labC1In = $("labC1"), labC2In = $("labC2"), labV2In = $("labV2");
+const labUFormelIn = $("labUFormel"), labWIn = $("labW"), labRhoIn = $("labRho"), labStockSel = $("labStock");
+(function fillLabStock() {
+  const first = document.createElement("option");
+  first.value = ""; first.textContent = "Beispiele …";
+  labStockSel.appendChild(first);
+  LAB_STOCK.forEach((s, i) => {
+    const o = document.createElement("option");
+    o.value = String(i); o.textContent = s[1];
+    labStockSel.appendChild(o);
+  });
+})();
+labStockSel.addEventListener("change", () => {
+  const s = LAB_STOCK[+labStockSel.value];
+  if (!s) return;
+  labUFormelIn.value = s[0];
+  labWIn.value = String(s[2]).replace(".", ",");
+  labRhoIn.value = String(s[3]).replace(".", ",");
+  labStockSel.value = "";
+  update();
+});
+function setLabTool(t) {
+  labTool = t;
+  [["labToolAnsetzen", "ansetzen"], ["labToolVerd", "verd"], ["labToolUmr", "umr"]].forEach(([id, v]) => {
+    $(id).classList.toggle("active", t === v);
+    $(id).setAttribute("aria-pressed", String(t === v));
+  });
+  $("labAnsetzenWrap").hidden = t !== "ansetzen";
+  $("labVerdWrap").hidden = t !== "verd";
+  $("labUmrWrap").hidden = t !== "umr";
+  update();
+}
+$("labToolAnsetzen").addEventListener("click", () => setLabTool("ansetzen"));
+$("labToolVerd").addEventListener("click", () => setLabTool("verd"));
+$("labToolUmr").addEventListener("click", () => setLabTool("umr"));
+[labFormelIn, labCIn, labVIn, labC1In, labC2In, labV2In, labUFormelIn, labWIn, labRhoIn]
+  .forEach(el => el.addEventListener("input", update));
+
+// Rechenkern der drei Werkzeuge (werfen bei unbekannter Formel)
+function computeLabAnsetzen(formel, c, vMl) {
+  const sp = parseSpecies(formel);
+  const M = molarMass(sp.counts);
+  const n = c * vMl / 1000;
+  return { sp, M, n, m: n * M };
+}
+function computeLabVerd(c1, c2, v2Ml) {
+  const v1 = c2 * v2Ml / c1;
+  return { v1, wasser: v2Ml - v1, faktor: c1 / c2 };
+}
+function computeLabUmr(formel, w, rho) {
+  const sp = parseSpecies(formel);
+  const M = molarMass(sp.counts);
+  const beta = (w / 100) * rho * 1000; // Massenkonzentration in g/L
+  return { sp, M, beta, c: beta / M };
+}
+// Massen-/Volumenformatierung mit sinnvoller Stellenzahl
+function labNum(x, unit) {
+  const d = x >= 100 ? 1 : x >= 10 ? 2 : x >= 0.1 ? 3 : 4;
+  return `${deNum(x, d)} ${unit}`;
+}
+
+// Rezeptkarte: Titel, „Gegeben“-Zeilen, Rechenweg, hervorgehobene Ergebnis-Box.
+// model = { title, given[], steps[], result, note?, gap (Ergebnis frei), err (falsches Ergebnis) }
+function renderLabCard(canvas, model, opts) {
+  const fs = opts.fontSize;
+  const meas = document.createElement("canvas").getContext("2d");
+  const widthOf = (t, font) => { meas.font = font; return meas.measureText(t).width; };
+  const fTitle = `bold ${Math.round(fs * 0.68)}px ${opts.fontFamily}`;
+  const fLine = `${Math.round(fs * 0.56)}px ${opts.fontFamily}`;
+  const fHead = `bold ${Math.round(fs * 0.56)}px ${opts.fontFamily}`;
+  const fRes = `bold ${Math.round(fs * 0.8)}px ${opts.fontFamily}`;
+  const resultText = model.gap ? "?" : model.result;
+  const showSteps = !model.gap && !model.err && model.steps.length;
+  const rows = [];
+  model.given.forEach((t, i) => rows.push({ t: (i === 0 ? "Gegeben:  " : "") + t, font: fLine }));
+  if (showSteps) {
+    rows.push({ t: "Rechnung:", font: fHead, gapBefore: true });
+    model.steps.forEach(t => rows.push({ t, font: fLine }));
+  }
+  const pad = fs * 0.8, lineH = fs * 0.85;
+  let W = widthOf(model.title, fTitle) + pad * 2 + fs * 0.5;
+  rows.forEach(r => { W = Math.max(W, widthOf(r.t, r.font) + pad * 2 + fs * 0.5); });
+  W = Math.max(W, widthOf(resultText, fRes) + pad * 2 + fs * 2);
+  if (model.note) W = Math.max(W, widthOf(model.note, fLine) + pad * 2 + fs * 0.5);
+  W = Math.ceil(Math.max(W, fs * 15));
+  const boxH = fs * 1.6;
+  const H = Math.ceil(pad + fs * 0.9 + rows.length * lineH + rows.filter(r => r.gapBefore).length * fs * 0.35
+    + fs * 0.55 + boxH + (model.note ? lineH + fs * 0.2 : 0) + pad);
+  canvas.width = Math.max(1, Math.round(W * opts.scale));
+  canvas.height = Math.max(1, Math.round(H * opts.scale));
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(opts.scale, 0, 0, opts.scale, 0, 0);
+  if (opts.background) { ctx.fillStyle = opts.background; ctx.fillRect(0, 0, W, H); }
+  else ctx.clearRect(0, 0, W, H);
+  ctx.textBaseline = "alphabetic";
+  // Kartenrahmen mit FAU-blauer Kante links
+  ctx.strokeStyle = "#bdbdbd"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(1, 1); ctx.lineTo(W - 1, 1); ctx.lineTo(W - 1, H - 1); ctx.lineTo(1, H - 1); ctx.closePath(); ctx.stroke();
+  ctx.fillStyle = "#04316a"; ctx.fillRect(0, 0, fs * 0.22, H);
+  let y = pad + fs * 0.55;
+  ctx.fillStyle = "#111111"; ctx.font = fTitle;
+  ctx.fillText(model.title, pad, y);
+  y += fs * 0.9;
+  rows.forEach(r => {
+    if (r.gapBefore) y += fs * 0.35;
+    ctx.fillStyle = "#333333"; ctx.font = r.font;
+    ctx.fillText(r.t, pad, y);
+    y += lineH;
+  });
+  // Ergebnis-Box (FAU-Gold hell)
+  y += fs * 0.15;
+  ctx.fillStyle = "#fdf3d9";
+  ctx.fillRect(pad, y - fs * 0.2, W - pad * 2, boxH);
+  ctx.strokeStyle = "#fdb735"; ctx.lineWidth = Math.max(1.2, fs * 0.07);
+  ctx.beginPath();
+  ctx.moveTo(pad, y - fs * 0.2); ctx.lineTo(W - pad, y - fs * 0.2);
+  ctx.lineTo(W - pad, y - fs * 0.2 + boxH); ctx.lineTo(pad, y - fs * 0.2 + boxH);
+  ctx.closePath(); ctx.stroke();
+  ctx.fillStyle = "#04316a"; ctx.font = fRes;
+  ctx.fillText(resultText, pad + fs * 0.5, y + fs * 0.85);
+  y += boxH + fs * 0.35;
+  if (model.note) {
+    ctx.fillStyle = "#5e5e5e"; ctx.font = fLine;
+    ctx.fillText(model.note, pad, y);
+  }
+  return { w: W, h: H };
+}
+
+// Karten-Modell je Werkzeug bauen (auch für den Arbeitsblatt-Druck)
+function buildLabModel(item) {
+  const num = s => parseFloat((s || "").trim().replace(",", "."));
+  if (item.tool === "ansetzen") {
+    const c = num(item.c), v = num(item.v);
+    const r = computeLabAnsetzen(item.f, c, v);
+    const fHtml = item.f.replace(/\*/g, " · ");
+    return {
+      r,
+      title: `Lösung ansetzen: ${deNum(v, 1)} mL ${fHtml}-Lösung, c = ${concDe(c)} mol/L`,
+      given: [`c = ${concDe(c)} mol/L,   V = ${deNum(v, 1)} mL,   M(${fHtml}) = ${deNum(r.M, 2)} g/mol`],
+      steps: [
+        `n = c · V = ${concDe(c)} mol/L · ${deNum(v / 1000, 4)} L = ${sciDeText(r.n)} mol`,
+        `m = n · M = ${sciDeText(r.n)} mol · ${deNum(r.M, 2)} g/mol`
+      ],
+      result: `Einwaage: m = ${labNum(r.m, "g")}`,
+      note: "Abwiegen, im Messkolben lösen, mit dest. Wasser bis zur Marke auffüllen."
+    };
+  }
+  if (item.tool === "verd") {
+    const c1 = num(item.c1), c2 = num(item.c2), v2 = num(item.v2);
+    const r = computeLabVerd(c1, c2, v2);
+    return {
+      r,
+      title: `Verdünnen: ${concDe(c1)} mol/L → ${concDe(c2)} mol/L (V = ${deNum(v2, 1)} mL)`,
+      given: [`c₁ = ${concDe(c1)} mol/L,   c₂ = ${concDe(c2)} mol/L,   V₂ = ${deNum(v2, 1)} mL`],
+      steps: [
+        `c₁ · V₁ = c₂ · V₂   →   V₁ = c₂ · V₂ / c₁`,
+        `V₁ = ${concDe(c2)} · ${deNum(v2, 1)} / ${concDe(c1)} = ${labNum(r.v1, "mL")}`
+      ],
+      result: `${labNum(r.v1, "mL")} Stammlösung + ${labNum(r.wasser, "mL")} Wasser`,
+      note: `Verdünnungsfaktor 1 : ${deNum(r.faktor, 1)} – Säuren stets ins vorgelegte Wasser geben!`
+    };
+  }
+  const w = num(item.w), rho = num(item.rho);
+  const r = computeLabUmr(item.f, w, rho);
+  return {
+    r,
+    title: `Konzentration von ${item.f} (w = ${deNum(w, 1)} %, ρ = ${deNum(rho, 2)} g/mL)`,
+    given: [`w = ${deNum(w, 1)} %,   ρ = ${deNum(rho, 2)} g/mL,   M(${item.f}) = ${deNum(r.M, 2)} g/mol`],
+    steps: [
+      `β = w · ρ = ${deNum(w / 100, 3)} · ${deNum(rho, 2)} g/mL · 1000 = ${labNum(r.beta, "g/L")}`,
+      `c = β / M = ${labNum(r.beta, "g/L")} / ${deNum(r.M, 2)} g/mol`
+    ],
+    result: `c = ${labNum(r.c, "mol/L")}`,
+    note: "In 1 L der Lösung stecken " + labNum(r.beta, "g") + " reiner Stoff."
+  };
+}
+// Zehnerpotenz nur wenn nötig, als Klartext für Canvas (ohne HTML-sup)
+function sciDeText(x) {
+  if (x >= 0.001) return deNum(x, x >= 1 ? 3 : 4);
+  const e = Math.floor(Math.log10(x));
+  return `${deNum(x / Math.pow(10, e), 2)}·10^${e}`;
+}
+
+function renderLabMode() {
+  const num = s => parseFloat((s || "").trim().replace(",", "."));
+  const bad = t => {
+    feedback.innerHTML = `<span class="msg-err">${escapeHtml(t)}</span>`;
+    clearPreview("Die Rezeptkarte erscheint hier.");
+  };
+  let item;
+  if (labTool === "ansetzen") {
+    const c = num(labCIn.value), v = num(labVIn.value);
+    if (!labFormelIn.value.trim()) return bad("Bitte eine Summenformel eingeben, z. B. NaOH oder CuSO4*5H2O.");
+    if (!isFinite(c) || c <= 0 || !isFinite(v) || v <= 0) return bad("Bitte Konzentration (mol/L) und Volumen (mL) größer 0 eingeben.");
+    item = { tool: "ansetzen", f: labFormelIn.value.trim(), c: labCIn.value, v: labVIn.value };
+  } else if (labTool === "verd") {
+    const c1 = num(labC1In.value), c2 = num(labC2In.value), v2 = num(labV2In.value);
+    if (!isFinite(c1) || c1 <= 0 || !isFinite(c2) || c2 <= 0 || !isFinite(v2) || v2 <= 0) return bad("Bitte c₁, c₂ und V₂ größer 0 eingeben.");
+    if (c2 >= c1) return bad("Die Zielkonzentration c₂ muss kleiner als c₁ sein – durch Verdünnen wird eine Lösung nie konzentrierter.");
+    item = { tool: "verd", c1: labC1In.value, c2: labC2In.value, v2: labV2In.value };
+  } else {
+    const w = num(labWIn.value), rho = num(labRhoIn.value);
+    if (!labUFormelIn.value.trim()) return bad("Bitte eine Summenformel eingeben, z. B. HCl.");
+    if (!isFinite(w) || w <= 0 || w > 100 || !isFinite(rho) || rho <= 0) return bad("Bitte w (0–100 %) und ρ (g/mL) größer 0 eingeben.");
+    item = { tool: "umr", f: labUFormelIn.value.trim(), w: labWIn.value, rho: labRhoIn.value };
+  }
+  let model;
+  try { model = buildLabModel(item); }
+  catch (e) { return bad(e.message || String(e)); }
+  showPreview(
+    (cv, o) => renderLabCard(cv, model, { fontSize: parseInt(sizeRange.value, 10), fontFamily: fontSel.value, scale: o.scale, background: o.background }),
+    `${model.title}. ${model.result}.`
+  );
+
+  let html = `<div><b>${escapeHtml(model.title)}</b></div>`;
+  html += `<div class="mech-box"><b>Rechenweg:</b><br>${model.steps.map(escapeHtml).join("<br>")}<br><b>${escapeHtml(model.result)}</b></div>`;
+  if (item.tool === "ansetzen") {
+    html += `<div><b>Anleitung:</b> ${escapeHtml(labNum(model.r.m, "g"))} abwiegen → in den ${escapeHtml(deNum(num(item.v), 0))}-mL-Messkolben geben → `
+      + `in wenig dest. Wasser vollständig lösen → bis zur Ringmarke auffüllen, verschließen, mischen.</div>`;
+    if (item.f.includes("*")) html += `<div class="msg-warn">⚠ Hydrat: Es zählt die molare Masse <b>mit</b> Kristallwasser (M = ${deNum(model.r.M, 2)} g/mol) – wasserfreies Salz ergäbe eine andere Einwaage.</div>`;
+  } else if (item.tool === "verd") {
+    html += `<div><b>Anleitung:</b> ${escapeHtml(labNum(model.r.v1, "mL"))} Stammlösung abmessen (Vollpipette/Messzylinder) → in den Messkolben geben → mit dest. Wasser auf ${escapeHtml(deNum(num(item.v2), 0))} mL auffüllen.</div>`;
+    html += `<div class="msg-warn">⚠ Bei konzentrierten Säuren umgekehrt arbeiten: Wasser vorlegen, Säure langsam zugeben („Erst das Wasser, dann die Säure …“) – die Verdünnungswärme kann sonst spritzen.</div>`;
+  } else {
+    html += `<div class="msg-muted">Damit lässt sich weiterrechnen: Für eine verdünnte Lösung gewünschter Konzentration die beiden anderen Lab-Tools nutzen (erst c des Konzentrats bestimmen, dann verdünnen).</div>`;
+  }
+  feedback.innerHTML = html;
+}
+
 /* ---------- Atombau: Energiestufen- & Orbitalmodell ---------- */
 // Elemente H bis Kr (Z = 1–36): [Symbol, deutscher Name]
 const ATOM_ELEMENTS = [
@@ -5274,6 +5549,24 @@ btnLink.addEventListener("click", async () => {
     u.searchParams.set("me", reiheMeSel.value);
     u.searchParams.set("ion", reiheIonSel.value);
   }
+  if (mode === "lab") {
+    u.searchParams.delete("eq");
+    u.searchParams.set("mode", "lab");
+    u.searchParams.set("tool", labTool);
+    if (labTool === "ansetzen") {
+      u.searchParams.set("f", labFormelIn.value.trim());
+      u.searchParams.set("c", labCIn.value.trim());
+      u.searchParams.set("v", labVIn.value.trim());
+    } else if (labTool === "verd") {
+      u.searchParams.set("c1", labC1In.value.trim());
+      u.searchParams.set("c2", labC2In.value.trim());
+      u.searchParams.set("v2", labV2In.value.trim());
+    } else {
+      u.searchParams.set("f", labUFormelIn.value.trim());
+      u.searchParams.set("w", labWIn.value.trim());
+      u.searchParams.set("rho", labRhoIn.value.trim());
+    }
+  }
   if (mode === "lattice") {
     u.searchParams.delete("eq");
     u.searchParams.set("mode", "lattice");
@@ -5534,7 +5827,8 @@ function renderSheetList() {
     badge.className = "badge";
     badge.textContent = it.type === "struct" ? "Struktur" : it.type === "mech" ? "Mechanismus"
       : it.type === "ox" ? "Oxidationszahlen" : it.type === "ph" ? "pH" : it.type === "titr" ? "Titration"
-      : it.type === "atom" ? "Atombau" : it.type === "galv" ? "Galvanik" : it.type === "reihe" ? "Spannungsreihe" : "Gleichung";
+      : it.type === "atom" ? "Atombau" : it.type === "galv" ? "Galvanik" : it.type === "reihe" ? "Spannungsreihe"
+      : it.type === "lab" ? "Labor" : "Gleichung";
     const lbl = document.createElement("span");
     lbl.className = "sheet-item-label";
     lbl.textContent = it.input;
@@ -5604,6 +5898,14 @@ btnAdd.addEventListener("click", () => {
       type: "reihe", me: reiheMeSel.value, ion: reiheIonSel.value,
       input: `Spannungsreihe: ${GALV_METALS[reiheMeSel.value].name} in ${atomIonLabel(reiheIonSel.value, ionMet.z)}-Lösung`
     });
+  } else if (mode === "lab") {
+    const it = labTool === "ansetzen"
+      ? { tool: "ansetzen", f: labFormelIn.value.trim(), c: labCIn.value.trim(), v: labVIn.value.trim() }
+      : labTool === "verd"
+        ? { tool: "verd", c1: labC1In.value.trim(), c2: labC2In.value.trim(), v2: labV2In.value.trim() }
+        : { tool: "umr", f: labUFormelIn.value.trim(), w: labWIn.value.trim(), rho: labRhoIn.value.trim() };
+    try { it.input = buildLabModel(it).title; } catch (e) { it.input = "Lab-Tools"; }
+    sheet.push({ type: "lab", ...it });
   } else {
     sheet.push({ type: "eq", input, mode });
   }
@@ -5756,6 +6058,30 @@ function errorSpec(item) {
           ? `Anode und Kathode sind vertauscht: Auch bei der Elektrolyse ist die Anode der Ort der Oxidation – hier das edlere Metall ${an.sym} am Pluspol (siehe Polung der Spannungsquelle).`
           : `Anode und Kathode sind vertauscht: Oxidiert wird das unedlere Metall ${an.sym} (niedrigeres Potenzial, ${deNum(an.e, 2)} V) – seine Halbzelle ist die Anode.` };
     }
+    if (item.type === "lab") {
+      const num = s => parseFloat((s || "").replace(",", "."));
+      const m = buildLabModel(item);
+      if (item.tool === "ansetzen") {
+        if (h % 2 === 0) {
+          return { kind: "lab", wrongResult: `Einwaage: m = ${labNum(m.r.n, "g")}`,
+            desc: `Die molare Masse wurde vergessen: berechnet wurde nur n = c·V (${sciDeText(m.r.n)} mol), als Gramm ausgegeben. Richtig: m = n · M = ${labNum(m.r.m, "g")}.` };
+        }
+        return { kind: "lab", wrongResult: `Einwaage: m = ${labNum(m.r.m * 1000, "g")}`,
+          desc: `Das Volumen wurde in mL statt in L eingesetzt – das Ergebnis ist um den Faktor 1000 zu groß. Richtig: ${labNum(m.r.m, "g")}.` };
+      }
+      if (item.tool === "verd") {
+        const v2 = num(item.v2);
+        if (h % 2 === 0) {
+          return { kind: "lab", wrongResult: `${labNum(m.r.v1, "mL")} Stammlösung + ${labNum(v2, "mL")} Wasser`,
+            desc: `Als Wassermenge wurde das gesamte Zielvolumen angesetzt – dann entstünden ${labNum(m.r.v1 + v2, "mL")} Lösung. Richtig: mit Wasser AUF ${labNum(v2, "mL")} auffüllen, also ${labNum(m.r.wasser, "mL")} Wasser.` };
+        }
+        const v1w = num(item.c1) * v2 / num(item.c2);
+        return { kind: "lab", wrongResult: `${labNum(v1w, "mL")} Stammlösung + Wasser`,
+          desc: `Die Formel wurde invertiert (V₁ = c₁·V₂/c₂) – mehr Stammlösung als Zielvolumen kann nicht stimmen. Richtig: V₁ = c₂·V₂/c₁ = ${labNum(m.r.v1, "mL")}.` };
+      }
+      return { kind: "lab", wrongResult: `c = ${labNum(m.r.c * 100, "mol/L")}`,
+        desc: `Der Massenanteil wurde nicht durch 100 geteilt (w als Faktor statt Prozent) – das Ergebnis ist 100-mal zu groß. Richtig: c = ${labNum(m.r.c, "mol/L")}.` };
+    }
     if (item.type === "titr") {
       const num = s => parseFloat((s || "").replace(",", "."));
       const an = TITR_ANALYTES[item.probe];
@@ -5898,6 +6224,14 @@ function renderItemCanvas(item, task) {
     r.title = `${GALV_METALS[item.me].name} in ${atomIonLabel(item.ion, GALV_METALS[item.ion].z)}-Lösung – läuft das?`;
     if (bare) { r.gap = true; r.gapHideRoles = false; }
     renderSpannungsreihe(cv, r, base);
+  } else if (item.type === "lab") {
+    const m = buildLabModel(item);
+    if (bare) m.gap = true;
+    else if (task === "error") {
+      const spec = errorSpec(item);
+      if (spec) { m.err = true; m.result = spec.wrongResult; }
+    }
+    renderLabCard(cv, m, base);
   } else if (item.type === "titr") {
     const num = s => parseFloat((s || "").replace(",", "."));
     const an = TITR_ANALYTES[item.probe];
@@ -5942,7 +6276,8 @@ function buildPrintHTML() {
       titr: "Bestimme den Äquivalenzpunkt (und ggf. den Halbäquivalenzpunkt) aus der Kurve.",
       atom: "Trage die Elektronen ein – beachte energetische Reihenfolge, Pauli-Prinzip und Hund'sche Regel.",
       galv: "Beschrifte Anode und Kathode (mit + und −), zeichne den Elektronenfluss ein und berechne die Zellspannung.",
-      reihe: "Entscheide mithilfe der Spannungsreihe, ob die Reaktion abläuft, und begründe. Gib ggf. die Reaktionsgleichung an."
+      reihe: "Entscheide mithilfe der Spannungsreihe, ob die Reaktion abläuft, und begründe. Gib ggf. die Reaktionsgleichung an.",
+      lab: "Berechne das gesuchte Ergebnis (Rechenweg angeben) und beschreibe das praktische Vorgehen."
     },
     sketch: {
       ox: "Bestimme die Oxidationszahlen bzw. stelle die Teilgleichungen und die Redoxgleichung auf.",
@@ -5951,7 +6286,8 @@ function buildPrintHTML() {
       struct: "Zeichne die Strukturformel.",
       atom: "Trage die Elektronen ein – beachte energetische Reihenfolge, Pauli-Prinzip und Hund'sche Regel.",
       galv: "Beschrifte Anode und Kathode (mit + und −), zeichne den Elektronenfluss ein und berechne die Zellspannung.",
-      reihe: "Entscheide mithilfe der Spannungsreihe, ob die Reaktion abläuft, und begründe. Gib ggf. die Reaktionsgleichung an."
+      reihe: "Entscheide mithilfe der Spannungsreihe, ob die Reaktion abläuft, und begründe. Gib ggf. die Reaktionsgleichung an.",
+      lab: "Berechne das gesuchte Ergebnis (Rechenweg angeben) und beschreibe das praktische Vorgehen."
     },
     error: {
       eq: "Diese Gleichung enthält einen Fehler. Finde und korrigiere ihn (Massen- und Ladungsbilanz prüfen) und begründe.",
@@ -5959,7 +6295,8 @@ function buildPrintHTML() {
       ph: "Die Markierung auf der Skala ist falsch gesetzt. Finde den Fehler, berechne den richtigen Wert und begründe.",
       titr: "Die eingezeichnete ÄP-Markierung enthält einen Fehler. Finde ihn und begründe mit der Kurve.",
       atom: "Dieses Diagramm verstößt gegen eine Besetzungsregel. Finde den Fehler, korrigiere ihn und nenne die verletzte Regel.",
-      galv: "Dieses Zellen-Schema enthält einen Fehler. Finde ihn und begründe mit der Spannungsreihe."
+      galv: "Dieses Zellen-Schema enthält einen Fehler. Finde ihn und begründe mit der Spannungsreihe.",
+      lab: "Das Ergebnis auf der Karte ist falsch berechnet. Finde den Fehler, korrigiere ihn und erkläre, was schiefgelaufen ist."
     }
   };
   const section = (heading, useTask, explainErrors) => {
@@ -6061,8 +6398,20 @@ if (startParams.get("betrieb") === "elys") setGalvBetrieb("elys");
 // Spannungsreihe-Parameter (?mode=reihe&me=Zn&ion=Cu)
 if (startParams.get("me") && GALV_METALS[startParams.get("me")]) reiheMeSel.value = startParams.get("me");
 if (startParams.get("ion") && GALV_METALS[startParams.get("ion")]) reiheIonSel.value = startParams.get("ion");
+// Lab-Tools-Parameter (?mode=lab&tool=verd&c1=1&c2=0,1&v2=100)
+if (startParams.get("mode") === "lab") {
+  if (["ansetzen", "verd", "umr"].includes(startParams.get("tool"))) setLabTool(startParams.get("tool"));
+  if (startParams.get("f")) (labTool === "umr" ? labUFormelIn : labFormelIn).value = startParams.get("f");
+  if (startParams.get("c")) labCIn.value = startParams.get("c");
+  if (startParams.get("v")) labVIn.value = startParams.get("v");
+  if (startParams.get("c1")) labC1In.value = startParams.get("c1");
+  if (startParams.get("c2")) labC2In.value = startParams.get("c2");
+  if (startParams.get("v2")) labV2In.value = startParams.get("v2");
+  if (startParams.get("w")) labWIn.value = startParams.get("w");
+  if (startParams.get("rho")) labRhoIn.value = startParams.get("rho");
+}
 const startMode = startParams.get("mode");
-setMode(startMode === "check" ? "check" : startMode === "stoich" ? "stoich" : startMode === "ox" ? "ox" : startMode === "ph" ? "ph" : startMode === "titr" ? "titr" : startMode === "atom" ? "atom" : startMode === "galv" ? "galv" : startMode === "reihe" ? "reihe" : startMode === "struct" ? "struct" : startMode === "lattice" ? "lattice" : startMode === "mech" ? "mech" : "auto");
+setMode(startMode === "check" ? "check" : startMode === "stoich" ? "stoich" : startMode === "ox" ? "ox" : startMode === "ph" ? "ph" : startMode === "titr" ? "titr" : startMode === "lab" ? "lab" : startMode === "atom" ? "atom" : startMode === "galv" ? "galv" : startMode === "reihe" ? "reihe" : startMode === "struct" ? "struct" : startMode === "lattice" ? "lattice" : startMode === "mech" ? "mech" : "auto");
 </script>
 </body>
 </html>
