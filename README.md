@@ -1,9 +1,11 @@
 # ⚗️ Chemie-Formeleditor
 
-Ein kleines Web-Tool zum Erstellen und Prüfen von chemischen Reaktionsgleichungen
-und einfachen organischen Strukturformeln, z. B. für Arbeitsblätter.
-Kernstück ist [index.html](index.html) plus der Ordner `assets/` (Logo und Schrift) –
-keine Installation, keine Abhängigkeiten, kein Server nötig.
+Ein Web-Tool für den Chemieunterricht: Reaktionsgleichungen, Stöchiometrie,
+Oxidationszahlen & Redox, pH-Werte & Titration, Atombau, Elektrochemie,
+Strukturformeln, Kristallgitter und Reaktionsmechanismen – mit Export und
+Arbeitsblatt-Generator. Kernstück ist [index.html](index.html) plus der Ordner
+`assets/` (Logo und Schrift) – keine Installation, keine Abhängigkeiten,
+kein Server nötig.
 
 ![ChEdit – eine Reaktionsgleichung wird automatisch ausgeglichen](docs/screenshot.png)
 
@@ -32,6 +34,37 @@ ChEdit-Logos liegt unter `assets/logo-chedit.svg` (z. B. für Favicon oder Druck
   das Tool berechnet die kleinsten ganzzahligen Koeffizienten (exakte Bruchrechnung, Gauß-Verfahren).
 - **Selbst ausgleichen & prüfen**: Gleichung mit eigenen Koeffizienten eingeben
   (`2 H2 + O2 -> 2 H2O`), das Tool zeigt pro Element die Atomanzahlen links/rechts – gut als Übung.
+- **Stöchiometrie-Rechner**: ausgeglichene Gleichung → interaktive Tabelle mit molaren
+  Massen; bei einem Stoff n (mol) oder m (g) eintragen, alle übrigen Werte werden über
+  das Stoffmengenverhältnis berechnet (auch Hydrate und Elektronen/Faraday).
+- **Oxidationszahlen & Redox**: OZ je Element aus der Summenformel (inkl. Sonderfällen
+  wie Peroxiden und Hydriden) oder **je Atom** aus der Struktur organischer Moleküle.
+  Redoxgleichungen werden erkannt und die **Teilgleichungen automatisch aufgestellt** –
+  Elektronen-, H⁺/OH⁻- und H₂O-Ausgleich je Milieu (sauer/basisch umschaltbar),
+  Gesamtgleichung mit Selbstprüfung, römische OZ über den Atomen.
+- **Säuren & Basen (pH)**: pH, pOH und Ionenkonzentrationen für starke und schwache
+  Säuren/Basen (pKs/pKb, H₂SO₄, Autoprotolyse, quadratisch genau) mit Rechenweg und
+  exportierbarer **pH-Skala** mit wählbaren Indikatoren (Universalindikator bis Rotkohlsaft).
+- **Titration (interaktiv)**: Probe, Maßlösung und Indikator wählen, mit dem
+  Bürette-Regler titrieren – Kurve, pH-Wert und Lösungsfarbe reagieren live.
+  Äquivalenz- und Halbäquivalenzpunkt, Pufferbereich und pH-Sprung werden markiert,
+  die Indikator-Eignung wird bewertet (exakte Ladungsbilanz-Rechnung inkl. Verdünnung).
+- **Atombau**: Elektronenkonfiguration für H bis Kr (auch Ionen) als
+  **Energiestufenmodell** oder **Orbitalmodell** (Kästchenschreibweise mit Spin-Pfeilen;
+  Pauli, Hund, 4s-vor-3d, Cr/Cu-Ausnahmen), Edelgas-Kurzform und **Herleitung der
+  PSE-Position** aus der Konfiguration samt klickbarem Mini-Periodensystem.
+- **Galvanik & Elektrolyse**: Galvanische Zellen aus zwei Halbzellen frei
+  zusammenbauen (10 Metalle; Nernst-Gleichung bei c ≠ 1 mol/L, auch
+  Konzentrationszellen) – Zellen-Schema mit Salzbrücke, Elektronenfluss und Voltmeter,
+  Zellendiagramm und Rechenweg. Umschaltbar auf **Elektrolyse**: Pole wechseln,
+  Zersetzungsspannung, **Faraday-Rechner** für abgeschiedene Massen.
+- **Spannungsreihe**: Metall und Salzlösung wählen → läuft die Redoxreaktion
+  freiwillig? E°-Skala mit Markierung, Begründung und Reaktionsgleichung.
+- **Kristallgitter (3D)**: NaCl, CsCl, kubisch/hexagonal dichteste Packung und
+  kubisch-raumzentriert als drehbares Kugelmodell in JSmol – mit
+  **Elementarzellen-Box**, Koordinationszahlen, Raumausfüllung und messbaren Abständen.
+- **EPA-Modell (3D)**: im 3D-Viewer zuschaltbar – Bindungswinkel und freie
+  Elektronenpaare am kraftfeld-optimierten Molekül.
 - **Strukturformeln (OC)**: Einfache organische Moleküle als **Skelettformel** oder mit
   **ausgeschriebenen C und H** zeichnen lassen. Eingabe als Halbstrukturformel
   (`CH3-CH(OH)-COOH`), SMILES (`CCO`, `c1ccccc1`) **oder deutscher Name**
@@ -48,11 +81,16 @@ ChEdit-Logos liegt unter `assets/logo-chedit.svg` (z. B. für Favicon oder Druck
   Zwischenablage kopieren oder herunterladen – direkt in Word/Docs einfügbar. Zusätzlich
   SVG-Download (Vektorgrafik, verlustfrei skalierbar). Schriftart, Größe und transparenter
   Hintergrund einstellbar.
-- **Arbeitsblatt-Modus**: Beliebig viele Gleichungen und Strukturen mit „➕ Zur Liste“
-  sammeln (bleibt lokal im Browser gespeichert), sortieren, mit Titel versehen und als
-  Druckseite/PDF ausgeben – mit Name/Klasse/Datum-Kopfzeile. Optionaler **Lückenmodus**
-  lässt die Koeffizienten frei (`____ CH4 + ____ O2 → …`) und hängt auf Wunsch ein
-  Lösungsblatt auf eigener Seite an.
+- **Arbeitsblatt-Modus**: Einträge aus fast allen Modi mit „➕ Zur Liste“ sammeln
+  (Gleichungen, Strukturen, Mechanismen, OZ/Redox-Schemata, pH-Skalen, Titrationskurven,
+  Atombau-Diagramme, Zellen-Schemata, Spannungsreihen; bleibt lokal im Browser
+  gespeichert), sortieren, mit Titel versehen und als Druckseite/PDF ausgeben – mit
+  Name/Klasse/Datum-Kopfzeile. Wählbarer **Aufgabentyp**: Lösung anzeigen · **Lücken**
+  (Koeffizienten, OZ, pH-Marker, Kurven-Beschriftungen frei) · **Fehlersuche** (das Tool
+  baut gezielt typische Fehlvorstellungen ein – z. B. „ÄP = neutral“, O pauschal als −II,
+  Hund verletzt, Anode/Kathode vertauscht – und das Lösungsblatt erklärt den Fehler) ·
+  **Skizzieren** (leere Diagramme zum Selbstzeichnen). Lösungsblatt auf eigener
+  Seite anhängbar.
 - **Reaktionsmechanismen**: Eigener Modus mit kuratierten, lehrplanrelevanten
   Mechanismen: **SN1**, **SN2** und **radikalische Substitution (SR)** (Photochlorierung
   von Methan). Bei den nukleophilen Substitutionen sind Substrat (Methyl/primär/sekundär/
@@ -162,7 +200,12 @@ index.html?eq=CH4%20%2B%20O2%20-%3E%20CO2%20%2B%20H2O&mode=check
 
 - `eq` – die Gleichung bzw. Strukturformel (URL-kodiert; der Button **„🔗 Link kopieren“**
   im Tool erzeugt solche Links automatisch)
-- `mode` – `check` für den Prüfmodus, `struct` für Strukturformeln, sonst automatisches Ausgleichen
+- `mode` – `check` (Prüfen), `stoich` (Stöchiometrie), `ox` (Oxidationszahlen),
+  `ph` (Säuren & Basen), `titr` (Titration), `atom` (Atombau), `galv` (Galvanik &
+  Elektrolyse), `reihe` (Spannungsreihe), `struct` (Strukturformeln),
+  `lattice` (Kristallgitter), `mech` (Mechanismen) – sonst automatisches Ausgleichen.
+  Modusspezifische Zusatzparameter (Stoff, Konzentrationen, Element, Halbzellen …)
+  erzeugt „🔗 Link kopieren“ automatisch mit.
 - `stil` – `voll` für ausgeschriebene C und H im Strukturmodus (sonst Skelettformel)
 - `form` – `linear` für die 90°-Schulbuch-Geometrie (nur zusammen mit `stil=voll`)
 - `ep` – `1` blendet freie Elektronenpaare ein (nur zusammen mit `stil=voll`)

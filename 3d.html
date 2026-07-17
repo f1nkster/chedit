@@ -49,6 +49,8 @@
     </select>
   </label>
   <label id="lblLbl" class="dis"><input type="checkbox" id="lblChk" disabled> Beschriftung</label>
+  <label id="epaLbl" class="dis"><input type="checkbox" id="epaChk" disabled title="EPA-Modell: Bindungswinkel und freie Elektronenpaare einblenden"> EPA (Winkel &amp; e⁻-Paare)</label>
+  <label id="cellLbl" class="dis"><input type="checkbox" id="cellChk" disabled title="Elementarzelle: Kanten der kristallographischen Einheitszelle einblenden"> Elementarzelle</label>
   <button id="stMess" type="button" disabled title="Abstände messen: zwei Atome nacheinander anklicken">📏 Messen</button>
   <button id="dlPng" type="button" disabled title="Ansicht als PNG-Bild speichern">⬇ PNG</button>
   <button id="dlSvg" type="button" disabled title="Ansicht als SVG speichern (eingebettetes Pixelbild)">⬇ SVG</button>
@@ -130,6 +132,91 @@ document.getElementById("stMess").addEventListener("click", () => {
   document.getElementById("stMess").textContent = messen ? "📏 Messen beenden" : "📏 Messen";
 });
 
+/* ---------- EPA-Modell: Bindungswinkel + freie Elektronenpaare ---------- */
+const vNorm = v => { const L = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / L, v[1] / L, v[2] / L]; };
+const vDot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+// Atomposition (0-basierter Index → atomno) aus der aktuellen (minimierten) Geometrie
+function atomPos(idx0) {
+  return String(Jmol.evaluate(applet, "{atomno=" + (idx0 + 1) + "}.xyz"))
+    .replace(/[{}]/g, "").trim().split(/\s+/).map(Number);
+}
+// Richtungen freier Elektronenpaare aus den Bindungsrichtungen (Abstoßungs-Relaxation;
+// Bindungen liegen fest, die Elektronenpaare rücken in die freien VSEPR-Positionen)
+function spreadDirs(bondDirs, count) {
+  let s = [0, 0, 0];
+  bondDirs.forEach(b => { s[0] += b[0]; s[1] += b[1]; s[2] += b[2]; });
+  const base = Math.hypot(s[0], s[1], s[2]) > 1e-3 ? vNorm([-s[0], -s[1], -s[2]]) : [0, 0, 1];
+  let lps = [];
+  for (let k = 0; k < count; k++)
+    lps.push(vNorm([base[0] + 0.3 * Math.cos(k * 2.1), base[1] + 0.3 * Math.sin(k * 2.1), base[2] + 0.2 * (k - 0.5)]));
+  for (let it = 0; it < 200; it++) {
+    lps = lps.map((u, i) => {
+      const f = [0, 0, 0];
+      bondDirs.concat(lps.filter((_, j) => j !== i)).forEach(e => {
+        const d = [u[0] - e[0], u[1] - e[1], u[2] - e[2]];
+        const L = Math.hypot(d[0], d[1], d[2]) || 1e-3, w = 1 / (L * L * L);
+        f[0] += d[0] * w; f[1] += d[1] * w; f[2] += d[2] * w;
+      });
+      const r = vDot(f, u);
+      return vNorm([u[0] + 0.1 * (f[0] - u[0] * r), u[1] + 0.1 * (f[1] - u[1] * r), u[2] + 0.1 * (f[2] - u[2] * r)]);
+    });
+  }
+  return lps;
+}
+function applyEPA() {
+  if (!epaData || !applet) return;
+  // jedes Objekt in einem eigenen Script erzeugen (robust)
+  Jmol.scriptWait(applet, "measure delete; draw delete;");
+  (epaData.angles || []).forEach(([i, c, j]) => Jmol.scriptWait(applet, "measure ({" + i + "}) ({" + c + "}) ({" + j + "});"));
+  Jmol.scriptWait(applet, "set measurementLabels ON; font measures 16; color measures [x111111];");
+  (epaData.lonePairs || []).forEach((lp, li) => {
+    const C = atomPos(lp.a);
+    const bondDirs = lp.nb.map(nbi => { const Q = atomPos(nbi); return vNorm([Q[0] - C[0], Q[1] - C[1], Q[2] - C[2]]); });
+    spreadDirs(bondDirs, lp.n).forEach((u, di) => {
+      const cen = [C[0] + u[0] * 1.15, C[1] + u[1] * 1.15, C[2] + u[2] * 1.15];
+      const ref = Math.abs(u[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+      const perp = vNorm([u[1] * ref[2] - u[2] * ref[1], u[2] * ref[0] - u[0] * ref[2], u[0] * ref[1] - u[1] * ref[0]]);
+      [-1, 1].forEach((sgn, ei) => {
+        const p = [cen[0] + perp[0] * 0.16 * sgn, cen[1] + perp[1] * 0.16 * sgn, cen[2] + perp[2] * 0.16 * sgn];
+        Jmol.scriptWait(applet, "draw ID lp" + li + "_" + di + "_" + ei + " {" + p[0].toFixed(3) + " " + p[1].toFixed(3) + " " + p[2].toFixed(3) + "} diameter 0.26 color [xc026d3];");
+      });
+    });
+  });
+}
+function clearEPA() { Jmol.scriptWait(applet, "measure delete; draw delete;"); }
+document.getElementById("epaChk").addEventListener("change", e => { e.target.checked ? applyEPA() : clearEPA(); });
+
+/* ---------- Elementarzelle: Kanten der kristallographischen Einheitszelle ---------- */
+// cellData = { o:[x,y,z], va, vb, vc } (Ursprung + 3 Kantenvektoren, gleiche Koordinaten wie die Atome)
+function applyCell() {
+  if (!cellData || !applet) return;
+  const o = cellData.o, va = cellData.va, vb = cellData.vb, vc = cellData.vc;
+  const corner = (i, j, k) => [
+    o[0] + i * va[0] + j * vb[0] + k * vc[0],
+    o[1] + i * va[1] + j * vb[1] + k * vc[1],
+    o[2] + i * va[2] + j * vb[2] + k * vc[2]
+  ];
+  const V = [[0,0,0],[1,0,0],[0,1,0],[0,0,1],[1,1,0],[1,0,1],[0,1,1],[1,1,1]];
+  let idx = 0;
+  for (let a = 0; a < 8; a++) for (let b = a + 1; b < 8; b++) {
+    // Kante = zwei Ecken, die sich in genau einer Koordinate unterscheiden
+    if (Math.abs(V[a][0]-V[b][0]) + Math.abs(V[a][1]-V[b][1]) + Math.abs(V[a][2]-V[b][2]) !== 1) continue;
+    const p = corner(V[a][0], V[a][1], V[a][2]), q = corner(V[b][0], V[b][1], V[b][2]);
+    Jmol.scriptWait(applet, "draw ID cell" + idx +
+      " line {" + p[0].toFixed(3) + " " + p[1].toFixed(3) + " " + p[2].toFixed(3) + "}" +
+      " {" + q[0].toFixed(3) + " " + q[1].toFixed(3) + " " + q[2].toFixed(3) + "}" +
+      " diameter 0.09 color [xfdb735];");
+    idx++;
+  }
+  cellDrawn = idx;
+}
+function clearCell() {
+  if (!applet) return;
+  for (let i = 0; i < cellDrawn; i++) Jmol.scriptWait(applet, "draw ID cell" + i + " delete;");
+  cellDrawn = 0;
+}
+document.getElementById("cellChk").addEventListener("change", e => { e.target.checked ? applyCell() : clearCell(); });
+
 /* ---------- Modell erst nach fertiger Optimierung zeigen ---------- */
 function finishModel() {
   if (modelDone || !applet) return;
@@ -137,9 +224,21 @@ function finishModel() {
   Jmol.script(applet, "center; zoom 0;");
   const ov = document.getElementById("optimiere");
   if (ov) ov.remove();
-  ["dlPng", "dlSvg", "dlMol", "repSel", "lblChk", "stMess"].forEach(id => { document.getElementById(id).disabled = false; });
-  document.getElementById("repLbl").classList.remove("dis");
+  // Beim Kristallgitter keinen Darstellungs-Umschalter (Stäbchen/Draht/ESP passen nicht zu bindungslosen Kugeln)
+  const enable = isGitter ? ["dlPng", "dlSvg", "dlMol", "lblChk", "stMess"] : ["dlPng", "dlSvg", "dlMol", "repSel", "lblChk", "stMess"];
+  enable.forEach(id => { document.getElementById(id).disabled = false; });
+  if (!isGitter) document.getElementById("repLbl").classList.remove("dis");
   document.getElementById("lblLbl").classList.remove("dis");
+  if (epaData && ((epaData.angles && epaData.angles.length) || (epaData.lonePairs && epaData.lonePairs.length))) {
+    document.getElementById("epaChk").disabled = false;
+    document.getElementById("epaLbl").classList.remove("dis");
+  }
+  if (isGitter && cellData) {
+    const chk = document.getElementById("cellChk");
+    chk.disabled = false;
+    document.getElementById("cellLbl").classList.remove("dis");
+    chk.checked = true; applyCell(); // Elementarzelle didaktisch standardmäßig zeigen
+  }
 }
 // wird von JSmol während der Minimierung aufgerufen (Status u. a. "starting", "calculate", "done")
 window.cheditMinDone = function () {
@@ -147,8 +246,10 @@ window.cheditMinDone = function () {
 };
 
 /* ---------- Start ---------- */
-// Payload im Hash: MOL-Datei (Standard) oder XYZ-Frames (typ=xyz, optional anim=1)
+// Payload: MOL (Standard, Molekül) · XYZ-Frames (typ=xyz, Mechanismus) · Gitter (typ=gitter, Kristall)
 const isXyz = params.get("typ") === "xyz";
+const isGitter = params.get("typ") === "gitter";
+const isCoords = isXyz || isGitter; // Koordinatenliste ohne Minimierung
 const isAnim = params.get("anim") === "1";
 // Payload aus localStorage (src=ls, roher Text) oder – als Fallback – aus dem URL-Hash (base64)
 let molfile = "";
@@ -157,8 +258,20 @@ if (params.get("src") === "ls") {
 } else {
   try { molfile = atob(location.hash.slice(1)); } catch (e) {}
 }
-const payloadOk = isXyz ? /^\s*\d+/.test(molfile) : molfile.indexOf("V2000") >= 0;
-if (isXyz) {
+// EPA-Daten (Bindungswinkel + Zahl freier Elektronenpaare je Atom) – nur bei Molekülen
+let epaData = null;
+if (params.get("src") === "ls" && !isCoords) {
+  try { epaData = JSON.parse(localStorage.getItem("cfe-3d-epa") || "null"); } catch (e) {}
+}
+// Elementarzelle (Ursprung + Kantenvektoren) – nur bei Kristallgittern
+let cellData = null, cellDrawn = 0;
+if (params.get("src") === "ls" && isGitter) {
+  try { cellData = JSON.parse(localStorage.getItem("cfe-3d-cell") || "null"); } catch (e) {}
+}
+const payloadOk = isCoords ? /^\s*\d+/.test(molfile) : molfile.indexOf("V2000") >= 0;
+if (isGitter) {
+  document.getElementById("headNote").textContent = "Kristallgitter (Ausschnitt) · gelbe Box = Elementarzelle · Drehen: Maus · Zoom: Mausrad · „📏 Messen“ für Abstände";
+} else if (isXyz) {
   document.getElementById("headNote").textContent = isAnim
     ? "Schematische Animation (interpoliert, keine berechnete Reaktion) · Drehen: Maus · Zoom: Mausrad"
     : "Schematische Geometrie · Drehen: Maus · Zoom: Mausrad";
@@ -184,7 +297,11 @@ if (location.protocol === "file:") {
         // XYZ-Frames (Mechanismus-Schema): keine Minimierung, ggf. Animation.
         // MOL (Standard): Kraftfeld-Minimierung, Overlay bis "done".
         // Achtung: "set minimizationRefresh false" würde die Minimierung in JSmol komplett anhalten!
-        const loadScript = isXyz
+        const loadScript = isGitter
+          // Kristallgitter: Kugelmodell ohne Bindungen, keine Minimierung
+          ? 'set antialiasDisplay ON; set frank OFF; set autobond OFF;' +
+            ' load DATA "m"\n' + molfile + 'END "m"; connect delete; spacefill 44%; wireframe off; center; zoom 0; rotate x 18; rotate y 24;'
+          : isXyz
           ? 'set antialiasDisplay ON; set frank OFF;' +
             ' load DATA "m"\n' + molfile + 'END "m"; center; zoom 0; rotate y 90;' +
             (isAnim ? ' animation fps 6; animation mode palindrome; frame 1; animation play;' : '')
@@ -203,9 +320,9 @@ if (location.protocol === "file:") {
         });
         document.getElementById("viewer").innerHTML =
           Jmol.getAppletHtml(applet) +
-          (isXyz ? "" : '<div id="optimiere">Geometrie wird optimiert …</div>');
-        // Sicherheitsnetz: spätestens nach 8 s (XYZ: 3 s) freigeben
-        setTimeout(finishModel, isXyz ? 3000 : 8000);
+          (isCoords ? "" : '<div id="optimiere">Geometrie wird optimiert …</div>');
+        // Sicherheitsnetz: spätestens nach 8 s (Koordinatenliste: 3 s) freigeben
+        setTimeout(finishModel, isCoords ? 3000 : 8000);
       } catch (e) {
         fail("JSmol-Fehler: " + String(e.message || e));
       }
