@@ -202,12 +202,12 @@
   #titrOptions input:focus, #titrOptions select:focus,
   #galvOptions input:focus, #galvOptions select:focus { outline: 2px solid var(--fau-blau); outline-offset: 1px; }
   #phOptions .opt-label, #titrOptions .opt-label, #titrRun .opt-label, #galvOptions .opt-label, #reiheOptions .opt-label { display: inline-flex; align-items: center; gap: 6px; }
-  #phOptions button, #titrRun button, #galvOptions > button, #reiheOptions button {
+  #phOptions button, #titrRun button, #galvOptions > button, #reiheOptions button, #atomOptions > button {
     font: inherit; font-size: .9rem; font-weight: 600; cursor: pointer;
     background: var(--card); color: var(--fau-blau); border: 1px solid var(--fau-blau);
     border-radius: 7px; padding: 8px 12px;
   }
-  #phOptions button:hover, #titrRun button:hover, #galvOptions > button:hover, #reiheOptions button:hover { background: var(--fau-blau-hell); }
+  #phOptions button:hover, #titrRun button:hover, #galvOptions > button:hover, #reiheOptions button:hover, #atomOptions > button:hover { background: var(--fau-blau-hell); }
   /* Bürette (Volumen-Slider) */
   #titrRun { align-items: center; }
   #titrRun .titr-slider-wrap { display: inline-flex; align-items: center; gap: 8px; flex: 1; min-width: 220px; }
@@ -445,6 +445,7 @@
       <button id="atomDarStufen" class="active" type="button" title="Energiestufenmodell: Schalen als Energieniveaus">Energiestufen</button>
       <button id="atomDarOrbital" type="button" title="Orbitalmodell: Kästchenschreibweise mit Spin-Pfeilen">Orbitale (Kästchen)</button>
     </div>
+    <button id="atomView3d" type="button" title="Besetzte Orbitale als räumliche Isoflächen im 3D-Viewer zeigen (wasserstoffähnlich berechnet)">🧊 3D-Orbitale</button>
   </div>
 
   <div class="input-row" id="galvOptions" hidden>
@@ -3038,7 +3039,7 @@ const HINTS = {
   ox: "Summenformel (H2SO4), organisches Molekül (Ethanol, CH3-CH2-OH) oder Reaktionsgleichung eingeben. Redoxgleichungen werden erkannt und die Teilgleichungen automatisch aufgestellt: Elektronen, H⁺/OH⁻ und H₂O werden je nach Milieu ergänzt und zur Gesamtgleichung kombiniert. Es genügt das Redox-Gerüst, z. B. MnO4^- + Fe^2+ -> Mn^2+ + Fe^3+.",
   ph: "Säure oder Base und Anfangskonzentration wählen – pH, pOH und Ionenkonzentrationen werden mit Rechenweg berechnet und auf der pH-Skala markiert. Die Verdünnungs-Knöpfe zeigen die logarithmische Skala: Faktor 10 bei der Konzentration verschiebt den pH-Wert um höchstens eine Stufe.",
   titr: "Probe (vorgelegte Säure oder Base), Maßlösung und Indikator wählen, dann mit dem Bürette-Regler Maßlösung zugeben – die Titrationskurve, der aktuelle pH-Wert und die Lösungsfarbe reagieren live. Markiert sind Äquivalenzpunkt, bei schwachen Säuren/Basen Halbäquivalenzpunkt (pH = pKs) und Pufferbereich; das Tool bewertet, ob der Indikator zum pH-Sprung passt.",
-  atom: "Element (H bis Kr) und ggf. Ladung wählen – die Elektronenkonfiguration wird als Energiestufenmodell (Schalen) oder Orbitalmodell (Kästchenschreibweise mit Spin-Pfeilen) gezeigt, mit Konfigurations-Schreibweise, Edelgas-Kurzform und den Besetzungsregeln (Pauli-Prinzip, Hund'sche Regel, energetische Reihenfolge).",
+  atom: "Element (H bis Kr) und ggf. Ladung wählen – die Elektronenkonfiguration wird als Energiestufenmodell (Schalen) oder Orbitalmodell (Kästchenschreibweise mit Spin-Pfeilen) gezeigt, mit Konfigurations-Schreibweise, Edelgas-Kurzform und den Besetzungsregeln (Pauli-Prinzip, Hund'sche Regel, energetische Reihenfolge). „🧊 3D-Orbitale“ zeigt die besetzten Orbitale als räumliche Isoflächen – einzeln oder als kompletter p-/d-Satz, wahlweise mit Phasen (+/−).",
   galv: "Zwei Halbzellen frei kombinieren (Metall + Salzlösung) – das Tool bestimmt Anode und Kathode aus den Standardpotenzialen, zeichnet die Zelle mit Salzbrücke, Elektronenfluss und Voltmeter und berechnet die Zellspannung (Nernst bei c ≠ 1 mol/L). Umschalter „Elektrolyse“: Eine Spannungsquelle erzwingt die Rückreaktion – die Pole wechseln, die Anode bleibt der Ort der Oxidation; mit Stromstärke und Zeit berechnet das Tool die abgeschiedene Masse (Faraday).",
   reihe: "Festes Metall und Ionenlösung wählen – die Spannungsreihe zeigt, ob die Redoxreaktion freiwillig abläuft (Zink in Kupfersulfat: ja; Kupfer in Zinksulfat: nein). Das unedlere Metall gibt Elektronen an die Ionen des edleren ab.",
   lab: "Laborrechner für die Praxis: Lösung ansetzen (Stoff, Konzentration und Volumen → Einwaage, auch für Hydrate), Verdünnen (c₁·V₁ = c₂·V₂ → Volumen der Stammlösung und des Wassers) und Umrechnen von Massenanteil + Dichte in Stoffmengenkonzentration (z. B. konzentrierte Salzsäure 37 % → 12 mol/L) – jeweils mit Rechenweg und Arbeitsanleitung.",
@@ -4905,6 +4906,17 @@ atomDarStufenBtn.addEventListener("click", () => setAtomDar("stufen"));
 atomDarOrbitalBtn.addEventListener("click", () => setAtomDar("orbital"));
 atomElSel.addEventListener("change", update);
 atomChargeSel.addEventListener("change", update);
+// 3D-Orbitale: besetzte Unterschalen an den Viewer übergeben (typ=orbital).
+// Payload bewusst ASCII-rein halten – der Hash-Fallback von openViewer nutzt btoa().
+$("atomView3d").addEventListener("click", () => {
+  const sym = atomElSel.value;
+  const Z = ATOM_ELEMENTS.findIndex(([s]) => s === sym) + 1;
+  const charge = parseInt(atomChargeSel.value, 10) || 0;
+  const m = electronModel(Z, charge);
+  if (!m || m.ne === 0) { setStatus("Für Teilchen ohne Elektronen gibt es keine Orbitale.", "err"); return; }
+  const subs = m.subs.filter(s => s.count > 0).map(s => ({ n: s.n, l: s.l, count: s.count }));
+  openViewer(JSON.stringify({ typ: "orbital", el: sym, ion: atomIonLabel(sym, charge), subs }), "typ=orbital");
+});
 
 function renderAtomMode() {
   const sym = atomElSel.value;
