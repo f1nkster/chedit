@@ -2488,8 +2488,19 @@ function createSvgTarget() {
 const MECH_TYPES = [
   ["sn2", "Nukleophile Substitution – SN2"],
   ["sn1", "Nukleophile Substitution – SN1"],
+  ["e2", "Eliminierung – E2"],
+  ["e1", "Eliminierung – E1"],
+  ["ae", "Elektrophile Addition – AE (Propen + HBr)"],
+  ["ver", "Veresterung (Essigsäure + Ethanol, H⁺-Kat.)"],
   ["sr", "Radikalische Substitution – SR (Methan + Cl₂)"]
 ];
+const MECH_SHORT = { sn1: "SN1", sn2: "SN2", e1: "E1", e2: "E2", ae: "AE", ver: "Veresterung", sr: "SR" };
+// Eliminierungs-Daten je Substrat: β-C im Substrat/Kation (Zaitsev), Alken-Produkt
+const MECH_ELIM = {
+  prim: { beta: "i:2", catBeta: "i:2", alken: "CCC=C", alkName: "But-1-en" },
+  sek:  { beta: "i:3", catBeta: "i:2", alken: "CC=CC", alkName: "But-2-en (Zaitsev-Produkt)" },
+  tert: { beta: "i:0", catBeta: "i:0", alken: "C=C(C)C", alkName: "2-Methylpropen" }
+};
 const MECH_SUBSTRATES = {
   mebr: { label: "Brommethan CH₃Br (Methyl)", smiles: "CBr", cat: "[CH3+]", klass: "Methyl", subs: ["H", "H", "H"] },
   prim: { label: "1-Brombutan (primär)", smiles: "CCCCBr", cat: "CCC[CH2+]", klass: "primär", subs: ["H", "H", "C3H7"] },
@@ -2588,9 +2599,185 @@ function buildRadicalSteps() {
   ];
 }
 
+// Eliminierung E2: konzertierter Angriff der Base am β-H (anti-periplanar)
+function buildE2Steps(subKey, nuKey) {
+  const sub = MECH_SUBSTRATES[subKey], el = MECH_ELIM[subKey], nu = MECH_NUCLEOPHILES[nuKey];
+  const baseH = nu.neutral ? "[OH3+]" : "O"; // protonierte Base im Produktbild
+  return [
+    {
+      title: "Konzertierter Angriff der Base",
+      text: "Die Base greift ein β-ständiges H-Atom an (anti-periplanar zum Brom). Gleichzeitig klappt das C–H-Bindungselektronenpaar zur C=C-Doppelbindung um, und das Brom verlässt das Molekül mit seinem Bindungselektronenpaar – alles in einem Schritt (bimolekular: v = k·[Substrat]·[Base]).",
+      scene: {
+        items: [{ kind: "mol", id: "nu", input: nu.smiles, lonePairs: true }, { kind: "gap" }, { kind: "mol", id: "sub", input: sub.smiles, lonePairs: true }],
+        curves: [
+          { from: { id: "nu", lp: "auto" }, to: { id: "sub", sel: el.beta, dx: -1.7, dy: -0.7 }, bend: -1.3 },
+          { from: { id: "sub", sel: el.beta, dx: -0.15, dy: -1.35 }, to: { id: "sub", bond: [el.beta, "brC"] }, bend: -0.9 },
+          { from: { id: "sub", bond: ["brC", "br"] }, to: { id: "sub", sel: "br", dx: 0.5, dy: -1.5 }, bend: -1.0 }
+        ],
+        labels: []
+      }
+    },
+    {
+      title: "Produkte",
+      text: `Es entstehen ${el.alkName}, ${nu.neutral ? "H₃O⁺" : "Wasser"} und das Bromid-Ion. Bei mehreren möglichen β-Positionen entsteht bevorzugt das höher substituierte Alken (Zaitsev-Regel).`,
+      scene: {
+        items: [{ kind: "mol", id: "alk", input: el.alken }, { kind: "plus" }, { kind: "mol", id: "bh", input: baseH, lonePairs: true }, { kind: "plus" }, { kind: "mol", id: "br", input: "[Br-]", lonePairs: true }],
+        curves: [], labels: []
+      }
+    }
+  ];
+}
+// Eliminierung E1: Heterolyse wie SN1, dann β-H-Abspaltung am Carbenium-Ion
+function buildE1Steps(subKey, nuKey) {
+  const sub = MECH_SUBSTRATES[subKey], el = MECH_ELIM[subKey], nu = MECH_NUCLEOPHILES[nuKey];
+  return [
+    {
+      title: "Heterolytische Spaltung (langsam)",
+      text: "Wie beim SN1 bricht die C–Br-Bindung heterolytisch – der unimolekulare, geschwindigkeitsbestimmende Schritt. Ob danach Substitution (SN1) oder Eliminierung (E1) folgt, entscheidet sich erst am Carbenium-Ion.",
+      scene: {
+        items: [{ kind: "mol", id: "sub", input: sub.smiles, lonePairs: true }],
+        curves: [{ from: { id: "sub", bond: ["brC", "br"] }, to: { id: "sub", sel: "br", dx: 0.5, dy: -1.5 }, bend: -1.0 }],
+        labels: [
+          { id: "sub", sel: "brC", text: "δ+", oppose: "br" },
+          { id: "sub", sel: "br", text: "δ−" }
+        ]
+      }
+    },
+    {
+      title: "Carbenium-Ion (Zwischenstufe)",
+      text: "Das planare Carbenium-Ion ist dieselbe Zwischenstufe wie beim SN1 – deshalb konkurrieren E1 und SN1 immer miteinander.",
+      scene: { items: [{ kind: "mol", id: "cat", input: sub.cat }, { kind: "plus" }, { kind: "mol", id: "br", input: "[Br-]", lonePairs: true }], curves: [], labels: [] }
+    },
+    {
+      title: "β-H-Abspaltung (schnell)",
+      text: "Die Base übernimmt ein H-Atom vom Nachbar-C (β-Position). Das Bindungselektronenpaar der C–H-Bindung klappt zum positiv geladenen C um und bildet die C=C-Doppelbindung.",
+      scene: {
+        items: [{ kind: "mol", id: "nu", input: nu.smiles, lonePairs: true }, { kind: "gap" }, { kind: "mol", id: "cat", input: sub.cat }],
+        curves: [
+          { from: { id: "nu", lp: "auto" }, to: { id: "cat", sel: el.catBeta, dx: -1.7, dy: -0.7 }, bend: -1.3 },
+          { from: { id: "cat", sel: el.catBeta, dx: -0.15, dy: -1.35 }, to: { id: "cat", bond: [el.catBeta, "cplus"] }, bend: -0.9 }
+        ],
+        labels: []
+      }
+    },
+    {
+      title: "Produkte",
+      text: `Es entstehen ${el.alkName} und ${nu.neutral ? "H₃O⁺" : "Wasser"}; das Bromid-Ion stammt aus Schritt 1. Zaitsev-Regel: bevorzugt das höher substituierte Alken.`,
+      scene: {
+        items: [{ kind: "mol", id: "alk", input: el.alken }, { kind: "plus" }, { kind: "mol", id: "bh", input: nu.neutral ? "[OH3+]" : "O", lonePairs: true }],
+        curves: [], labels: []
+      }
+    }
+  ];
+}
+// Elektrophile Addition: HBr an Propen (Markownikow)
+function buildAdditionSteps() {
+  return [
+    {
+      title: "Elektrophiler Angriff (π-Elektronen)",
+      text: "Die π-Elektronen der Doppelbindung greifen das positiv polarisierte H-Atom des HBr an. Markownikow: Das H addiert an das endständige C-Atom (das mit MEHR H-Atomen) – denn nur so entsteht das stabilere sekundäre Carbenium-Ion.",
+      scene: {
+        items: [{ kind: "mol", id: "sub", input: "CC=C" }, { kind: "gap" }, { kind: "mol", id: "hbr", input: "[H]Br", lonePairs: true }],
+        curves: [
+          { from: { id: "sub", bond: ["i:1", "i:2"] }, to: { id: "hbr", sel: "i:0" }, bend: -1.4 },
+          { from: { id: "hbr", bond: ["i:0", "i:1"] }, to: { id: "hbr", sel: "i:1", dx: 0.6, dy: -1.4 }, bend: -1.0 }
+        ],
+        labels: [
+          { id: "hbr", sel: "i:0", text: "δ+" },
+          { id: "hbr", sel: "i:1", text: "δ−" }
+        ]
+      }
+    },
+    {
+      title: "Carbenium-Ion (Markownikow)",
+      text: "Das sekundäre Propyl-Kation ist durch den +I-Effekt der beiden Alkylgruppen stabilisiert. Der anti-Markownikow-Weg (H an das mittlere C) ergäbe ein instabiles primäres Kation – er findet praktisch nicht statt.",
+      scene: { items: [{ kind: "mol", id: "cat", input: "C[CH+]C" }, { kind: "plus" }, { kind: "mol", id: "br", input: "[Br-]", lonePairs: true }], curves: [], labels: [] }
+    },
+    {
+      title: "Nucleophiler Angriff des Bromids",
+      text: "Das Bromid-Ion greift mit einem freien Elektronenpaar das positiv geladene C-Atom an.",
+      scene: {
+        items: [{ kind: "mol", id: "br", input: "[Br-]", lonePairs: true }, { kind: "gap" }, { kind: "mol", id: "cat", input: "C[CH+]C" }],
+        curves: [{ from: { id: "br", lp: "auto" }, to: { id: "cat", sel: "cplus" }, bend: -1.5 }],
+        labels: []
+      }
+    },
+    {
+      title: "Produkt: 2-Brompropan",
+      text: "Gesamt: Propen + HBr ⟶ 2-Brompropan (Markownikow-Produkt). Aus der Doppelbindung ist eine Einfachbindung geworden – typisch Addition: zwei Teilchen werden eins, keine Abgangsgruppe.",
+      scene: { items: [{ kind: "mol", id: "p", input: "CC(Br)C" }], curves: [], labels: [] }
+    }
+  ];
+}
+// Veresterung (säurekatalysiert): Essigsäure + Ethanol ⇌ Ester + Wasser
+function buildEsterSteps() {
+  return [
+    {
+      title: "Protonierung der Carbonsäure",
+      text: "Der Katalysator (H₃O⁺) protoniert das Carbonyl-O der Essigsäure. Dadurch wird das Carboxyl-C deutlich elektrophiler – erst das macht den Angriff des schwachen Nucleophils Ethanol möglich.",
+      scene: {
+        items: [{ kind: "mol", id: "sa", input: "CC(=O)O", lonePairs: true }, { kind: "plus" }, { kind: "mol", id: "h", input: "[OH3+]" }],
+        curves: [{ from: { id: "sa", sel: "i:2", dx: 0.5, dy: -0.7 }, to: { id: "h", sel: "i:0", dx: -1.1, dy: -0.3 }, bend: -1.2 }],
+        labels: []
+      }
+    },
+    {
+      title: "Nucleophiler Angriff des Ethanols",
+      text: "Das O-Atom des Ethanols greift mit einem freien Elektronenpaar das elektrophile Carboxyl-C an.",
+      scene: {
+        items: [{ kind: "mol", id: "sa", input: "CC(=[OH+])O", lonePairs: true }, { kind: "gap" }, { kind: "mol", id: "et", input: "CCO", lonePairs: true }],
+        curves: [{ from: { id: "et", lp: "auto" }, to: { id: "sa", sel: "i:1" }, bend: 1.4 }],
+        labels: [{ id: "sa", sel: "i:1", text: "δ+", oppose: "i:2" }]
+      }
+    },
+    {
+      title: "Tetraedrische Zwischenstufe – Protonenwanderung",
+      text: "Am ehemaligen Carboxyl-C sitzen jetzt vier Gruppen. Ein Proton wandert (über das Lösungsmittel vermittelt) vom Ethanol-O zu einer OH-Gruppe – so wird aus ihr die gute Abgangsgruppe Wasser.",
+      scene: {
+        items: [{ kind: "mol", id: "z", input: "CC(O)(O)[OH+]CC", lonePairs: true }],
+        curves: [{ from: { id: "z", sel: "i:2", dx: 0.1, dy: -1.3 }, to: { id: "z", sel: "i:4", dx: -0.2, dy: -1.4 }, bend: -1.1 }],
+        labels: []
+      }
+    },
+    {
+      title: "Abspaltung von Wasser",
+      text: "Die C–O-Bindung zum protonierten Wasser bricht; ein freies Elektronenpaar des benachbarten O bildet gleichzeitig die neue C=O-Doppelbindung.",
+      scene: {
+        items: [{ kind: "mol", id: "z2", input: "CC(O)([OH2+])OCC", lonePairs: true }],
+        curves: [
+          { from: { id: "z2", bond: ["i:1", "i:3"] }, to: { id: "z2", sel: "i:3", dx: 1.5, dy: -1.6 }, bend: -1.2 },
+          { from: { id: "z2", sel: "i:2", dx: -1.3, dy: 1.1 }, to: { id: "z2", bond: ["i:1", "i:2"] }, bend: 1.5 }
+        ],
+        labels: []
+      }
+    },
+    {
+      title: "Deprotonierung – Katalysator zurück",
+      text: "Ein Wassermolekül übernimmt das Proton vom protonierten Ester. Der Katalysator H₃O⁺ wird zurückgebildet – er wurde also nicht verbraucht.",
+      scene: {
+        items: [{ kind: "mol", id: "es", input: "CC(=[OH+])OCC", lonePairs: true }, { kind: "plus" }, { kind: "mol", id: "w", input: "O", lonePairs: true }],
+        curves: [{ from: { id: "w", lp: "auto" }, to: { id: "es", sel: "i:2", dx: 0.5, dy: -0.8 }, bend: 1.3 }],
+        labels: []
+      }
+    },
+    {
+      title: "Produkte (Gleichgewicht!)",
+      text: "Essigsäureethylester (fruchtiger Geruch) und Wasser – die Veresterung ist eine Kondensation und läuft als Gleichgewicht. Mehr Ausbeute: Wasser entziehen oder einen Partner im Überschuss einsetzen (Le Chatelier).",
+      scene: {
+        items: [{ kind: "mol", id: "p", input: "CC(=O)OCC" }, { kind: "plus" }, { kind: "mol", id: "h", input: "[OH3+]" }],
+        curves: [], labels: []
+      }
+    }
+  ];
+}
+
 // Schrittfolgen: jede Szene beschreibt Moleküle, Elektronenpfeile und δ-Labels
 function buildMechSteps(mech, subKey, nuKey) {
   if (mech === "sr") return buildRadicalSteps();
+  if (mech === "ae") return buildAdditionSteps();
+  if (mech === "ver") return buildEsterSteps();
+  if (mech === "e2") return buildE2Steps(subKey, nuKey);
+  if (mech === "e1") return buildE1Steps(subKey, nuKey);
   const sub = MECH_SUBSTRATES[subKey], nu = MECH_NUCLEOPHILES[nuKey];
   const nuItem = { kind: "mol", id: "nu", input: nu.smiles, lonePairs: true };
   const subItem = { kind: "mol", id: "sub", input: sub.smiles, lonePairs: true };
@@ -3049,7 +3236,7 @@ const HINTS = {
   lab: "Laborrechner für die Praxis: Lösung ansetzen (Stoff, Konzentration und Volumen → Einwaage, auch für Hydrate), Verdünnen (c₁·V₁ = c₂·V₂ → Volumen der Stammlösung und des Wassers) und Umrechnen von Massenanteil + Dichte in Stoffmengenkonzentration (z. B. konzentrierte Salzsäure 37 % → 12 mol/L) – jeweils mit Rechenweg und Arbeitsanleitung.",
   lattice: "Ionen- oder Metallgitter wählen und als 3D-Modell öffnen. Ein Gitterausschnitt wird als Kugelmodell gezeigt (drehbar, zoombar); Strukturtyp, Koordinationszahl und Beispiele stehen dabei. Die Elementarzelle ist als gelbe Box eingeblendet (im Viewer abschaltbar). Mit „Messen“ lassen sich im 3D-Modell Ionenabstände bestimmen.",
   struct: "Molekül als Halbstrukturformel (CH3-CH(CH3)-OH), SMILES (CCO) oder Name (Propan-2-ol, Essigsäure) eingeben – Darstellung als Skelettformel oder mit ausgeschriebenen C und H.",
-  mech: "Lehrplan-Mechanismen Schritt für Schritt: Mechanismus, Substrat und Nucleophil wählen. Die SN1/SN2-Abwägung wird begründet; jeder Schritt lässt sich exportieren oder ins Arbeitsblatt übernehmen. Der Umschalter „Energieprofil“ zeigt die Energie über der Reaktionskoordinate – mit Aktivierungsenergie, ΔE und einem Marker, der beim Durchblättern mitwandert (SN1: Zwischenstufe, ÜZ 1 geschwindigkeitsbestimmend; SN2: ein Maximum)."
+  mech: "Lehrplan-Mechanismen Schritt für Schritt: SN1/SN2 (Substrat und Nucleophil wählbar, begründete Abwägung), E1/E2 (Zaitsev, anti-periplanar), elektrophile Addition (Markownikow an Propen + HBr), säurekatalysierte Veresterung (Gleichgewicht) und radikalische Substitution. Der Umschalter „Energieprofil“ zeigt die Energie über der Reaktionskoordinate – mit Aktivierungsenergie, ΔE und einem Marker, der beim Durchblättern mitwandert."
 };
 const PLACEHOLDERS = {
   auto: "z. B. CH4 + O2 -> CO2 + H2O",
@@ -3207,40 +3394,72 @@ let mechView = "steps"; // "steps" | "profil"
 // Stationen (Steigung 0 an jeder Station) + stepX: Marker-Position je Mechanismus-Schritt
 function buildEnergyProfile(m, subKey, nuKey) {
   const neutral = MECH_NUCLEOPHILES[nuKey] && MECH_NUCLEOPHILES[nuKey].neutral;
-  if (m === "sn2") {
+  if (m === "sn2" || m === "e2") {
     const stations = [
       { x: 0.06, E: 0.32, label: "Edukte", pos: "u" },
       { x: 0.50, E: 0.88, label: "Übergangszustand ‡", pos: "o", ts: true },
       { x: 0.94, E: 0.14, label: "Produkte", pos: "u" }
     ];
-    const stepX = [0.06, 0.50, 0.94, 0.97];
+    const stepX = m === "e2" ? [0.06, 0.94] : [0.06, 0.50, 0.94, 0.97];
     return { stations, stepX,
-      title: "Energieprofil SN2 – ein Schritt, ein Maximum",
+      title: m === "e2" ? "Energieprofil E2 – ein Schritt, ein Maximum" : "Energieprofil SN2 – ein Schritt, ein Maximum",
       eaLabel: "Eₐ",
-      note: "Ein einziger Übergangszustand, keine Zwischenstufe: Bindungsbruch und -knüpfung laufen gleichzeitig. Der Schritt ist bimolekular – v = k·[Substrat]·[Nucleophil]." };
+      note: m === "e2"
+        ? "Ein konzertierter Schritt ohne Zwischenstufe: H-Abstraktion, C=C-Bildung und Br-Abgang laufen gleichzeitig (bimolekular: v = k·[Substrat]·[Base])."
+        : "Ein einziger Übergangszustand, keine Zwischenstufe: Bindungsbruch und -knüpfung laufen gleichzeitig. Der Schritt ist bimolekular – v = k·[Substrat]·[Nucleophil]." };
   }
-  if (m === "sn1") {
+  if (m === "sn1" || m === "e1") {
     // Carbenium-Stabilität (+I-Effekt): tertiär < sekundär < primär/Methyl → Barrierenhöhe
     const lvl = subKey === "tert" ? 0 : subKey === "sek" ? 1 : 2;
     const ts1 = [0.80, 0.90, 0.98][lvl], zw = [0.44, 0.54, 0.64][lvl];
     const stations = [
       { x: 0.05, E: 0.28, label: "Edukte", pos: "u" },
       { x: 0.26, E: ts1, label: "ÜZ 1 ‡", pos: "o", ts: true },
-      { x: 0.48, E: zw, label: "Carbenium-Ion (Zwischenstufe)", pos: "u" },
+      { x: 0.48, E: zw, label: "Carbenium-Ion (Zwischenstufe)", pos: "o" }, // im Sattel ist Platz
       { x: 0.67, E: zw + 0.16, label: "ÜZ 2 ‡", pos: "o", ts: true },
       { x: 0.94, E: 0.12, label: "Produkte", pos: "u" }
     ];
-    const stepX = [0.05, 0.48, 0.67, 0.94, 0.97];
+    const stepX = m === "e1" ? [0.05, 0.48, 0.67, 0.94] : [0.05, 0.48, 0.67, 0.94, 0.97];
     return { stations, stepX,
-      title: "Energieprofil SN1 – zwei Schritte, Zwischenstufe",
+      title: m === "e1" ? "Energieprofil E1 – zwei Schritte, Zwischenstufe" : "Energieprofil SN1 – zwei Schritte, Zwischenstufe",
       eaLabel: "Eₐ (1. Schritt)",
-      note: "ÜZ 1 liegt am höchsten – die Ionisierung ist geschwindigkeitsbestimmend (unimolekular: v = k·[Substrat]). Je stabiler das Carbenium-Ion (+I-Effekt der Alkylgruppen), desto niedriger die Barriere." };
+      note: (m === "e1"
+        ? "Wie beim SN1: Die Heterolyse (ÜZ 1) ist geschwindigkeitsbestimmend, die β-H-Abspaltung schnell. "
+        : "ÜZ 1 liegt am höchsten – die Ionisierung ist geschwindigkeitsbestimmend (unimolekular: v = k·[Substrat]). ")
+        + "Je stabiler das Carbenium-Ion (+I-Effekt der Alkylgruppen), desto niedriger die Barriere." };
+  }
+  if (m === "ae") {
+    const stations = [
+      { x: 0.05, E: 0.42, label: "Propen + HBr", pos: "u" },
+      { x: 0.28, E: 0.90, label: "ÜZ 1 ‡", pos: "o", ts: true },
+      { x: 0.48, E: 0.56, label: "Carbenium-Ion", pos: "o" },
+      { x: 0.66, E: 0.68, label: "ÜZ 2 ‡", pos: "o", ts: true },
+      { x: 0.94, E: 0.10, label: "2-Brompropan", pos: "u" }
+    ];
+    return { stations, stepX: [0.05, 0.48, 0.66, 0.94],
+      title: "Energieprofil AE – elektrophiler Angriff bestimmt das Tempo",
+      eaLabel: "Eₐ (1. Schritt)",
+      note: "Der elektrophile Angriff (Bildung des Carbenium-Ions) ist der langsame Schritt; der Bromid-Angriff ist schnell. Die Addition ist deutlich exotherm (π- wird zu σ-Bindung)." };
+  }
+  if (m === "ver") {
+    const stations = [
+      { x: 0.05, E: 0.34, label: "Säure + Alkohol", pos: "u" },
+      { x: 0.28, E: 0.80, label: "ÜZ 1 ‡", pos: "o", ts: true },
+      { x: 0.50, E: 0.48, label: "tetraedrische Zwischenstufe", pos: "o" },
+      { x: 0.72, E: 0.76, label: "ÜZ 2 ‡", pos: "o", ts: true },
+      { x: 0.95, E: 0.32, label: "Ester + Wasser", pos: "u" }
+    ];
+    return { stations, stepX: [0.05, 0.28, 0.50, 0.72, 0.85, 0.95],
+      title: "Energieprofil Veresterung – Gleichgewicht (vereinfacht)",
+      eaLabel: "Eₐ",
+      dLabel1: "ΔE ≈ 0", dLabel2: "(Gleichgewicht)",
+      note: "Edukte und Produkte liegen energetisch fast gleich – deshalb stellt sich ein Gleichgewicht ein (Hin- und Rückreaktion: Veresterung/Esterhydrolyse). Der Katalysator senkt beide Barrieren, verschiebt aber das Gleichgewicht nicht." };
   }
   // SR: Profil der beiden Kettenfortpflanzungs-Schritte
   const stations = [
     { x: 0.05, E: 0.44, label: "Cl• + CH₄", pos: "u" },
     { x: 0.25, E: 0.82, label: "ÜZ 1 ‡", pos: "o", ts: true },
-    { x: 0.46, E: 0.52, label: "CH₃• + HCl", pos: "u" },
+    { x: 0.46, E: 0.52, label: "CH₃• + HCl", pos: "o" },
     { x: 0.65, E: 0.74, label: "ÜZ 2 ‡", pos: "o", ts: true },
     { x: 0.94, E: 0.12, label: "CH₃Cl + Cl•", pos: "u" }
   ];
@@ -3265,7 +3484,7 @@ function profileE(stations, x) {
 // data = buildEnergyProfile + { curX (Marker oder null), curStep (1-basiert), gap }
 function renderEnergyProfile(canvas, data, opts) {
   const fs = opts.fontSize;
-  const padL = fs * 2.0, padR = fs * 4.6, padT = fs * 1.9, padB = fs * 2.0;
+  const padL = fs * 2.0, padR = fs * 5.4, padT = fs * 1.9, padB = fs * 2.0;
   const plotW = fs * 16.5, plotH = fs * 9.0;
   const W = Math.ceil(padL + plotW + padR), H = Math.ceil(padT + plotH + padB);
   canvas.width = Math.max(1, Math.round(W * opts.scale));
@@ -3319,16 +3538,17 @@ function renderEnergyProfile(canvas, data, opts) {
       const t = st.label;
       ctx.fillText(t, Math.max(fs * 0.2, Math.min(W - fs * 0.2 - ctx.measureText(t).width, x - ctx.measureText(t).width / 2)), ty);
     });
-    // E_A: Doppelpfeil vom Edukt-Niveau zur ersten Barriere
+    // E_A: Doppelpfeil fast senkrecht unter dem Gipfel – dort ist der Raum zwischen
+    // Edukt-Niveau und Barriere konstruktiv frei (in der Flanke kollidiert immer etwas)
     const ed = data.stations[0], ts1 = data.stations.find(s => s.ts);
-    const ax = X(ts1.x) - fs * 1.1;
+    const ax = X(ts1.x) - fs * 0.35;
     ctx.strokeStyle = "#2e7d32"; ctx.lineWidth = Math.max(1.2, fs * 0.08);
     ctx.setLineDash([3, 3]);
-    ctx.beginPath(); ctx.moveTo(X(ed.x), Y(ed.E)); ctx.lineTo(ax + fs * 0.8, Y(ed.E)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(X(ed.x), Y(ed.E)); ctx.lineTo(ax + fs * 0.6, Y(ed.E)); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.beginPath(); ctx.moveTo(ax, Y(ed.E)); ctx.lineTo(ax, Y(ts1.E)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ax, Y(ed.E)); ctx.lineTo(ax, Y(ts1.E) + fs * 0.15); ctx.stroke();
     ctx.fillStyle = "#2e7d32";
-    [[Y(ts1.E), -1], [Y(ed.E), 1]].forEach(([y, dir]) => {
+    [[Y(ts1.E) + fs * 0.15, -1], [Y(ed.E), 1]].forEach(([y, dir]) => {
       ctx.beginPath();
       ctx.moveTo(ax, y);
       ctx.lineTo(ax - fs * 0.14, y - dir * fs * 0.3);
@@ -3336,7 +3556,8 @@ function renderEnergyProfile(canvas, data, opts) {
       ctx.closePath(); ctx.fill();
     });
     ctx.font = `bold ${Math.round(fs * 0.55)}px ${opts.fontFamily}`;
-    ctx.fillText(data.eaLabel, ax + fs * 0.25, (Y(ed.E) + Y(ts1.E)) / 2 + fs * 0.2);
+    // Label am Pfeilfuß: rechts davon liegt die Kurve überall oberhalb des Edukt-Niveaus
+    ctx.fillText(data.eaLabel, ax + fs * 0.35, Y(ed.E) - fs * 0.35);
     // ΔE-Klammer rechts (Produkte vs. Edukte)
     const pr = data.stations[data.stations.length - 1];
     const dx = padL + plotW + fs * 1.2;
@@ -3356,8 +3577,8 @@ function renderEnergyProfile(canvas, data, opts) {
     });
     ctx.fillStyle = "#5e5e5e";
     ctx.font = `${Math.round(fs * 0.5)}px ${opts.fontFamily}`;
-    ctx.fillText("ΔE < 0", dx + fs * 0.25, (Y(ed.E) + Y(pr.E)) / 2);
-    ctx.fillText("(exergonisch)", dx + fs * 0.25, (Y(ed.E) + Y(pr.E)) / 2 + fs * 0.6);
+    ctx.fillText(data.dLabel1 || "ΔE < 0", dx + fs * 0.25, (Y(ed.E) + Y(pr.E)) / 2);
+    ctx.fillText(data.dLabel2 || "(exergonisch)", dx + fs * 0.25, (Y(ed.E) + Y(pr.E)) / 2 + fs * 0.6);
   }
   // Marker des aktuellen Schritts (goldener Punkt auf der Kurve)
   if (data.curX !== null && data.curX !== undefined) {
@@ -3386,10 +3607,17 @@ $("mechViewSteps").addEventListener("click", () => setMechView("steps"));
 $("mechViewProfil").addEventListener("click", () => setMechView("profil"));
 
 function renderMech() {
-  const m = mechTypeSel.value, s = mechSubSel.value, nuK = mechNuSel.value;
+  const m = mechTypeSel.value;
   const isRadical = m === "sr";
-  // Substrat/Nucleophil-Auswahl nur bei der nukleophilen Substitution zeigen
-  mechSubSel.hidden = mechNuSel.hidden = isRadical;
+  const isElim = m === "e1" || m === "e2";
+  const fixedEdukte = isRadical || m === "ae" || m === "ver"; // feste Edukte, keine Auswahl
+  // Eliminierung: Brommethan hat kein β-H, Iodid ist eine zu schwache Base
+  if (isElim && mechSubSel.value === "mebr") mechSubSel.value = "tert";
+  if (isElim && mechNuSel.value === "i") mechNuSel.value = "oh";
+  Array.from(mechSubSel.options).forEach(o => { o.hidden = isElim && o.value === "mebr"; });
+  Array.from(mechNuSel.options).forEach(o => { o.hidden = isElim && o.value === "i"; });
+  mechSubSel.hidden = mechNuSel.hidden = fixedEdukte;
+  const s = mechSubSel.value, nuK = mechNuSel.value;
   const steps = buildMechSteps(m, s, nuK);
   if (mechStep > steps.length - 1) mechStep = steps.length - 1;
   if (mechStep < 0) mechStep = 0;
@@ -3402,6 +3630,21 @@ function renderMech() {
     boxHtml = `<div class="mech-box"><b>Radikalkettenreaktion:</b> Kettenstart, -fortpflanzung und -abbruch. ` +
       `Die <b>Fischhaken-Pfeile</b> (halbe Spitze) stehen für die Bewegung <b>einzelner</b> Elektronen, ` +
       `die vollen Pfeile in den anderen Mechanismen für Elektronen<b>paare</b>.</div>`;
+  } else if (isElim) {
+    boxHtml = `<div class="mech-box"><b>Eliminierung vs. Substitution:</b> Base und Nucleophil sind oft dasselbe Teilchen – ` +
+      `E und SN konkurrieren immer. Starke, sterisch anspruchsvolle Basen und <b>Erwärmen</b> begünstigen die Eliminierung; ` +
+      (m === "e1"
+        ? `E1 teilt sich das Carbenium-Ion mit SN1 (tertiäre Substrate, schwache Basen).`
+        : `E2 braucht eine starke Base und die <b>anti-periplanare</b> Anordnung von β-H und Abgangsgruppe.`) +
+      ` Bei mehreren β-Positionen gilt die <b>Zaitsev-Regel</b> (höher substituiertes Alken bevorzugt).</div>`;
+  } else if (m === "ae") {
+    boxHtml = `<div class="mech-box"><b>Markownikow-Regel:</b> Bei unsymmetrischen Alkenen addiert das H an das C-Atom mit den ` +
+      `<b>meisten H-Atomen</b>. Der wahre Grund steckt in Schritt 2: Es bildet sich bevorzugt das <b>stabilere Carbenium-Ion</b> ` +
+      `(+I-Effekt der Alkylgruppen) – die Regel ist nur die Merkhilfe für diese Stabilitätsfrage.</div>`;
+  } else if (m === "ver") {
+    boxHtml = `<div class="mech-box"><b>Säurekatalysierte Kondensation im Gleichgewicht:</b> Der Katalysator H⁺ aktiviert die ` +
+      `Carbonsäure (Schritt 1) und wird am Ende zurückgebildet (Schritt 5). Alle Schritte sind umkehrbar – die Rückreaktion ist ` +
+      `die <b>saure Esterhydrolyse</b>. Ausbeute steigern: Wasser entziehen oder Alkohol im Überschuss (Le Chatelier).</div>`;
   } else {
     const a = mechAssessment(s, nuK);
     const mismatch = a.empfohlen !== m;
@@ -6066,16 +6309,14 @@ btnAdd.addEventListener("click", () => {
   const input = eqInput.value.trim();
   if (mode === "mech") {
     const m = mechTypeSel.value, s = mechSubSel.value, nuK = mechNuSel.value;
+    const combo = m === "sr" ? "Methan + Cl₂"
+      : m === "ae" ? "Propen + HBr"
+      : m === "ver" ? "Essigsäure + Ethanol"
+      : `${MECH_SUBSTRATES[s].label} + ${MECH_NUCLEOPHILES[nuK].label}`;
     if (mechView === "profil") {
-      sheet.push({
-        type: "eprofil", m, sub: s, nu: nuK,
-        input: `Energieprofil ${m.toUpperCase()}${m === "sr" ? " (Methan + Cl₂)" : ` – ${MECH_SUBSTRATES[s].label} + ${MECH_NUCLEOPHILES[nuK].label}`}`
-      });
+      sheet.push({ type: "eprofil", m, sub: s, nu: nuK, input: `Energieprofil ${MECH_SHORT[m]} – ${combo}` });
     } else {
-      sheet.push({
-        type: "mech", m, sub: s, nu: nuK, step: mechStep,
-        input: `${m.toUpperCase()} – ${MECH_SUBSTRATES[s].label} + ${MECH_NUCLEOPHILES[nuK].label}, Schritt ${mechStep + 1}`
-      });
+      sheet.push({ type: "mech", m, sub: s, nu: nuK, step: mechStep, input: `${MECH_SHORT[m]} – ${combo}, Schritt ${mechStep + 1}` });
     }
   } else if (mode === "struct") {
     sheet.push({ type: "struct", input, stil: structStyle, form: structGeo, ep: epCb.checked });
@@ -6278,8 +6519,8 @@ function errorSpec(item) {
     }
     if (item.type === "eprofil") {
       const prof = buildEnergyProfile(item.m, item.sub, item.nu);
-      if (item.m === "sn2") {
-        // Klassische Fehlvorstellung: beim SN2 eine Zwischenstufe einzeichnen
+      if (item.m === "sn2" || item.m === "e2") {
+        // Klassische Fehlvorstellung: bei einem konzertierten Mechanismus eine Zwischenstufe einzeichnen
         const stations = [
           prof.stations[0],
           { x: 0.34, E: 0.84, label: "ÜZ ‡", pos: "o", ts: true },
@@ -6288,15 +6529,20 @@ function errorSpec(item) {
           prof.stations[2]
         ];
         return { kind: "eprofil", stations,
-          desc: "Beim SN2 gibt es KEINE Zwischenstufe: Bindungsbruch und -knüpfung laufen in einem Schritt, der Übergangszustand ist ein einzelnes Maximum (kein Minimum dazwischen)." };
+          desc: `Beim ${MECH_SHORT[item.m]} gibt es KEINE Zwischenstufe: Alles läuft in einem konzertierten Schritt, der Übergangszustand ist ein einzelnes Maximum (kein Minimum dazwischen).` };
       }
-      if (item.m === "sn1") {
+      if (item.m === "sn1" || item.m === "e1" || item.m === "ae") {
         const stations = prof.stations.map(s => ({ ...s }));
         stations[3].E = stations[1].E + 0.10; // ÜZ 2 fälschlich über ÜZ 1
+        const why = item.m === "ae"
+          ? "der elektrophile Angriff (Bildung des Carbenium-Ions) ist der langsame Schritt, der Bromid-Angriff schnell"
+          : item.m === "e1"
+            ? "die Heterolyse (1. Schritt) ist geschwindigkeitsbestimmend, die β-H-Abspaltung schnell"
+            : "die Ionisierung (1. Schritt) ist geschwindigkeitsbestimmend, der Angriff des Nucleophils schnell";
         return { kind: "eprofil", stations,
-          desc: "ÜZ 2 wurde am höchsten gezeichnet – tatsächlich ist beim SN1 der 1. Schritt (Ionisierung) geschwindigkeitsbestimmend: ÜZ 1 muss die höchste Barriere sein, der Angriff des Nucleophils ist schnell." };
+          desc: `ÜZ 2 wurde am höchsten gezeichnet – tatsächlich ${why}: ÜZ 1 muss die höchste Barriere sein.` };
       }
-      return null; // SR: kein kuratierter Fehler
+      return null; // SR/Veresterung: kein kuratierter Fehler
     }
     if (item.type === "lab") {
       const num = s => parseFloat((s || "").replace(",", "."));
